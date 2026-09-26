@@ -1,0 +1,393 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap');
+
+/* =========================================================
+   Limbo-specific theme (scoped to this game only)
+   Shared sidebar control tokens/classes live in
+   styles/global.css — do not redefine them here.
+   ========================================================= */
+.container {}
+
+.container {
+  composes: game-shell from global;
+  display: flex;
+  background: var(--color-bg-game);
+  /* game grid panel — exact Casino value */
+  color: var(--color-text-primary);
+  font-family: 'proxima-nova';
+  font-feature-settings: "salt" on;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: var(--layout-sidebar-width);
+  background: var(--color-bg-panel);
+  /* sidebar panel */
+  padding: var(--sidebar-padding);
+  /* 15px top/left/right, 16px bottom — shared token */
+  display: flex;
+  flex-direction: column;
+  gap: var(--sidebar-group-gap); /* group rhythm (global) */
+  border-right: 1px solid var(--color-divider-panel);
+  /* sidebar/game divider #253241 */
+}
+
+/* =========================================================
+   Sidebar controls — shared styling lives in styles/global.css
+   (composed here so every game matches). Limbo-specific tweaks
+   only below.
+   ========================================================= */
+.modeToggle {
+  composes: sidebar-mode-toggle from global;
+}
+
+.modeBtn {
+  composes: sidebar-mode-btn from global;
+}
+
+.active {
+  composes: sidebar-mode-active from global;
+}
+
+.controlGroup {
+  composes: sidebar-control-group from global;
+}
+
+.labelRow {
+  composes: sidebar-label-row from global;
+}
+
+.inputGroup {
+  composes: sidebar-input-group from global;
+}
+
+.inputWrapper {
+  composes: sidebar-input-wrapper from global;
+}
+
+.btcIcon {
+  composes: sidebar-currency-icon from global;
+}
+
+.splitButtons {
+  composes: sidebar-split-buttons from global;
+}
+
+.divider {
+  composes: sidebar-divider from global;
+}
+
+.betButton {
+  composes: sidebar-bet-button from global;
+}
+
+.readonlyInput {
+  composes: sidebar-readonly-input from global;
+}
+
+/* ===== Stage ===== */
+.gameStage {
+  flex: 1;
+  background: var(--color-bg-game);
+  /* game grid panel — exact Casino value */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* top-anchored: pills first, then the display centres itself in the
+     leftover space and the bottom stack pins itself to the bottom */
+  justify-content: flex-start;
+  overflow: hidden;
+  /* nothing scrolls inside the box */
+  gap: 16;
+  padding: var(--stage-pad); /* equal on all four sides (global rule) */
+}
+
+/* Desktop big number — an odometer. The row is full-width flex with the
+   decimal point anchored dead-centre: the integer half is right-aligned
+   (new digits slot in on the LEFT), the fraction half is left-aligned and
+   fixed-width. Every digit sits in its own fixed slot, so "1" and "6"
+   occupy identical space and counting never shifts the string. */
+.bigMultiplier {
+  /* centres vertically in the area above the bottom stack: this auto top
+     margin and the stack's auto top margin split the free space evenly */
+  margin-top: auto;
+  font-size: 120px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  color: var(--color-text-primary);
+  user-select: none;
+  flex-shrink: 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on, "salt" on;
+}
+
+.odInt {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  min-width: 0;
+}
+
+/* Fraction + × suffix glued to the integer part — the whole string
+   (number + X) centres as one combined unit, never split halves. */
+.odRight {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.odFrac {
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+}
+
+.odSlot {
+  width: 0.6em;
+  flex: 0 0 auto;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.odDot {
+  width: 0.32em;
+  flex: 0 0 auto;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.odSuffix {
+  margin-left: 0.04em;
+  flex: 0 0 auto;
+  letter-spacing: 0;
+}
+
+.odSrOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.bigWin {
+  color: var(--accent-green);
+}
+
+.bigLoss {
+  color: var(--accent-red);
+}
+
+/* Win popup — shared, dead-centre overlay (global.css). The stage is
+   position:relative, so this floats over the number without pushing it. */
+.winPopup {
+  composes: ui-win-popup from global;
+}
+
+.winPopupTitle {
+  composes: ui-win-popup-title from global;
+}
+
+.winPopupAmount {
+  composes: ui-win-popup-amount from global;
+}
+
+.winPopupMult {
+  composes: ui-win-popup-mult from global;
+}
+
+.winPopupDivider {
+  composes: ui-win-popup-divider from global;
+}
+
+/* History pills (the Crash system, shared) — pinned to the TOP of the
+   stage; the auto bottom margin absorbs the free space so the big number
+   stays centred in what is left. */
+.historyRow {
+  composes: ui-history-row from global;
+}
+
+.historyMeta {
+  composes: ui-history-meta from global;
+}
+
+.historyIcon {
+  composes: ui-history-icon from global;
+}
+
+.historyYou {
+  composes: ui-history-you from global;
+}
+
+.historyScroll {
+  composes: ui-history-scroll from global;
+}
+
+.historyPills {
+  composes: ui-history-pills from global;
+}
+
+.histPill {
+  composes: ui-hist-pill from global;
+}
+
+.histGreen {
+  composes: ui-hist-green from global;
+}
+
+.histGray {
+  composes: ui-hist-gray from global;
+}
+
+.histPlaceholder {
+  composes: ui-hist-placeholder from global;
+}
+
+/* Bottom stack (target multiplier + win chance) — in-flow, pinned to the
+   bottom of the stage by its auto top margin (same 16px side/bottom
+   insets the old absolute anchor gave it). In-flow so the display above
+   can centre in the true leftover area. */
+.bottomStack {
+  align-self: stretch;
+  margin: auto 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+/* The bottom stats panel fills .bottomStack at the same surface (global.css). */
+.bottomPanel {
+  composes: ui-panel-surface from global;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  box-sizing: border-box;
+  box-shadow: var(--shadow-md);
+}
+
+.bottomBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bottomLabel {
+  font-size: var(--font-size-control);
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.bottomInputWrap {
+  composes: sidebar-input-group from global;
+  position: relative;
+  box-shadow: var(--shadow-md);
+}
+
+/* Even 8px padding like every sidebar input (global); the scoped rule
+   only reserves room on the right for the × / % suffix. */
+.container .bottomInput {
+  padding-right: 72px;
+}
+
+.bottomInputWrap .percentSuffix {
+  right: 12px; /* the (readonly) win chance has no stepper */
+}
+
+.bottomInput {
+  width: 100%;
+  height: 44px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--color-text-primary);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.xSuffix,
+.percentSuffix {
+  position: absolute;
+  right: 40px; /* clear the stepper column */
+  color: rgba(255, 255, 255, 0.65);
+  font-weight: 900;
+}
+
+/* (Recent multipliers now live in the top history pills row.) */
+
+@media (max-width: 900px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom-right-radius: 0px;
+  }
+
+  .bigMultiplier {
+    font-size: 76px;
+  }
+
+  .bottomStack {
+    width: 100%;
+  }
+}
+
+/* ===== Better mobile layout (<= 600px) ===== */
+@media (max-width: 600px) {
+  .sidebar {
+    border-bottom-right-radius: 0px;
+  }
+
+  .gameStage {
+    padding: var(--stage-pad);
+    justify-content: flex-start;
+  }
+
+  .bigMultiplier {
+    font-size: 64px;
+    letter-spacing: -2px;
+    margin: 16px 0 10px 0;
+  }
+
+  /* Mobile: the stack flows under the number at the stage's own padding
+     (the desktop side/bottom margins are released here). The short stage
+     can't fit the win popup, so phones skip it entirely — the win still
+     reads on the multiplier itself, which turns green (bigWin). */
+  .winPopup {
+    display: none;
+  }
+  .container .bottomStack {
+    position: relative;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    transform: none;
+    width: 100%;
+    margin: 0;
+    gap: 10px;
+  }
+
+  /* stat inputs stay in one horizontal row on mobile (same as desktop) */
+  .bottomPanel {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* the stage is top-aligned on small screens — no auto margin needed */
+  .historyRow {
+    margin-bottom: 10px;
+  }
+}

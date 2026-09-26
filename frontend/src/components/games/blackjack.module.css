@@ -1,0 +1,668 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap');
+
+/* =========================================================
+   Blackjack-specific theme (scoped to this game only)
+   Shared sidebar control tokens/classes live in
+   styles/global.css — do not redefine them here.
+   ========================================================= */
+.container {
+  --lose-red: #E9103C;
+
+  --pill-bg: rgba(0, 0, 0, 0.35);
+  --pill-text: rgba(255, 255, 255, 0.95);
+
+  /* Action button icon colors */
+  --action-hit: #ff9d00;
+  --action-hit-disabled: #a66800;
+  --action-stand: #9000ff;
+  --action-stand-disabled: #5c00a3;
+  --action-split: #ffffff;
+  --action-split-disabled: #999999;
+  --action-double: #ffffff;
+  --action-double-disabled: #999999;
+}
+
+.container {
+  composes: game-shell from global;
+  display: flex;
+  background: var(--color-bg-game);
+  /* game grid panel — exact Casino value */
+  color: var(--color-text-primary);
+  font-family: 'proxima-nova';
+  font-feature-settings: "salt" on;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: var(--layout-sidebar-width);
+  background: var(--color-bg-panel);
+  /* sidebar panel */
+  padding: var(--sidebar-padding);
+  /* 15px top/left/right, 16px bottom — shared token */
+  display: flex;
+  flex-direction: column;
+  gap: var(--sidebar-group-gap);
+  /* group rhythm (global) */
+  border-right: 1px solid var(--color-divider-panel);
+  /* sidebar/game divider #253241 */
+}
+
+/* Manual/Auto switcher — the shared control (global.css) */
+.modeToggle {
+  composes: sidebar-mode-toggle from global;
+}
+
+.modeBtn {
+  composes: sidebar-mode-btn from global;
+}
+
+.active {
+  composes: sidebar-mode-active from global;
+}
+
+.controlGroup {
+  composes: sidebar-control-group from global;
+}
+
+.labelRow {
+  composes: sidebar-label-row from global;
+  /* same #8596a6 labels as every other game */
+}
+
+/* =========================================================
+   Sidebar controls — shared styling lives in styles/global.css
+   (composed here so every game matches). Blackjack-specific
+   tweaks only below.
+   ========================================================= */
+.inputGroup {
+  composes: sidebar-input-group from global;
+}
+
+.inputWrapper {
+  composes: sidebar-input-wrapper from global;
+}
+
+.btcIcon {
+  composes: sidebar-currency-icon from global;
+  margin: 0 10px;
+}
+
+.splitButtons {
+  composes: sidebar-split-buttons from global;
+}
+
+.divider {
+  composes: sidebar-divider from global;
+}
+
+.actionGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* Action buttons — the shared side action button (global.css), the
+   same look as the Coin Flip game's action buttons. */
+.actionButton {
+  composes: ui-action-button from global;
+}
+
+/* Action icon (filled SVG images inside buttons) */
+.actionIcon {
+  width: 18px;
+  height: 18px;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: filter 0.15s;
+}
+
+/* ── Hit: #ff9d00 ── */
+.actionHit .actionIcon {
+  filter:
+    brightness(0) saturate(100%) invert(67%) sepia(72%) saturate(1500%) hue-rotate(360deg) brightness(102%) contrast(104%);
+}
+
+/* ── Stand: #9000ff ── */
+.actionStand .actionIcon {
+  filter:
+    brightness(0) saturate(100%) invert(18%) sepia(95%) saturate(5000%) hue-rotate(265deg) brightness(105%) contrast(115%);
+}
+
+/* ── Split: #fff ── */
+.actionSplit .actionIcon {
+  filter: brightness(0) invert(1);
+}
+
+/* ── Double: #fff ── */
+.actionDouble .actionIcon {
+  filter: brightness(0) invert(1);
+}
+
+
+
+
+.betButton {
+  composes: sidebar-bet-button from global;
+}
+
+/* Board */
+.gameStage {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--color-bg-game);
+  /* game grid panel — exact Casino value */
+}
+
+/* ===== SIMPLE DECK IMAGE (top-right) ===== */
+.deckEntity {
+  position: absolute;
+  right: 30px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.deckEntityImg {
+  width: 106px;
+  height: auto;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.35));
+}
+
+/* Areas */
+.dealerArea {
+  position: absolute;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: clamp(260px, 72vw, 320px);
+  height: 201px;
+}
+
+.fanTop {
+  position: absolute;
+  left: 0;
+  top: 18px;
+  width: 100%;
+  height: 181px;
+}
+
+.playerArea {
+  position: absolute;
+  bottom: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(760px, 95%);
+  height: 244px;
+}
+
+.handsRow {
+  display: flex;
+  gap: 18px;
+  align-items: flex-end;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.handWrap {
+  width: clamp(260px, 72vw, 320px);
+  height: 212px;
+  position: relative;
+  border-radius: 12px;
+  padding: 6px;
+}
+
+.fanBottom {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 191px;
+}
+
+/* Totals pills */
+.totalPillDark,
+.totalPillPlayer {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: -30px;
+  height: 24px;
+  min-width: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background: #364E5C;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* Settled totals take the SAME colour as the cards' outcome outline —
+   green on win, red on loss, orange on push. */
+.totalWin {
+  background: var(--accent-green);
+  color: #07210f;
+}
+
+.totalLose {
+  background: var(--accent-red);
+  color: #fff;
+}
+
+.totalPush {
+  background: #ff9d00;
+  color: #3a2200;
+}
+
+/* Ribbon SVG */
+.ribbon {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  transform: translate(-50%, -50%);
+  width: min(460px, 86%);
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.ribbonSvg {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.25));
+}
+
+/* Cards (Board) */
+.cardSlot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 114px;
+  height: 186px;
+  transform-origin: 20px 163px;
+}
+
+.cardMotion {
+  width: 100%;
+  height: 100%;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+.card {
+  width: 114px;
+  height: 186px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.10);
+  position: relative;
+  overflow: hidden;
+}
+
+.cardNoClip {
+  overflow: visible;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+}
+
+.cardOutlineWin {
+  box-shadow:
+    0 14px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 3px var(--accent-green);
+}
+
+.cardOutlineLose {
+  box-shadow:
+    0 14px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 3px var(--lose-red);
+}
+
+/* Push: cards outlined in orange */
+.cardOutlinePush {
+  box-shadow:
+    0 14px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 3px #ff9d00;
+}
+
+/* Front card */
+.corner {
+  position: absolute;
+  left: 14px;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rank {
+  font-weight: 900;
+  font-size: 38px;
+  line-height: 1;
+}
+
+.center {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.centerSuitIconLarge {
+  width: 66px;
+  height: 66px;
+  display: block;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.redText {
+  color: #e11d2e;
+}
+
+.blackText {
+  color: #0b1820;
+}
+
+.suitIconRed {
+  filter: invert(17%) sepia(91%) saturate(6400%) hue-rotate(350deg) brightness(92%) contrast(115%);
+}
+
+.suitIconBlack {
+  filter: brightness(0) saturate(100%);
+}
+
+/* Card Back (used for hidden cards + dealer flip back)
+   Clean white outline around the SVG */
+.cardBackWrap {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 10px;
+  /* matches .card radius visually */
+  background: #ffffff;
+  border: 5px solid rgba(255, 255, 255, 0.98);
+  border-bottom: 5px solid white;
+  border-top: 5px solid white;
+  box-sizing: border-box;
+}
+
+.cardBackImg {
+  width: 100%;
+  justify-self: center;
+  height: 100%;
+  display: grid;
+  background-color: #007bff;
+}
+
+/* Deal flight — every card materialises face-down ON the deck, flat and
+   straight (no tilt, no zoom), and starts MOVING toward its seat on the
+   very first frame: no dwell at the source, only the fade-in ramps
+   (fully opaque by 12%) while the translate runs the whole 400ms —
+   position only, no rotation, no bounce/overshoot. The start point
+   comes from --deal-from-x/--deal-from-y (measured per card from the real
+   deck position — see dealFromVars() in Blackjack.jsx); the fallback is
+   only for the very first paint before measurement lands. The flip to
+   face-up is a SEPARATE step that only starts once this flight completes,
+   and the next card's flight starts 100ms after this one arrives (flight
+   400ms, step 500ms) — the handoff never waits for the flip. The easing is
+   deliberately mild (not a deep ease-out) so the flight reads quick and
+   even all the way into the seat. */
+@keyframes dealIn {
+  0% {
+    opacity: 0;
+    transform: translate(var(--deal-from-x, 230px), var(--deal-from-y, -270px));
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(0px, 0px);
+  }
+}
+
+.cardDeal {
+  animation: dealIn 400ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
+}
+
+/* Exit flight — when a NEW bet is placed, every old card slides out
+   diagonally down-left at 45° (ease-in, 15px max = 10.6px per axis)
+   while fading out. Within one hand the cards stagger left to right
+   (100ms apart via animation-delay); every hand's own sequence starts
+   at the same moment, in parallel with all other hands. */
+@keyframes cardOut {
+  from {
+    opacity: 1;
+    transform: translate(0px, 0px);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(-10.6px, 10.6px);
+  }
+}
+
+.cardOut {
+  animation: cardOut 200ms ease-in both;
+}
+
+/* Total labels exit with a plain fade-out only — no slide, no diagonal
+   motion of any kind. */
+@keyframes totalOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+.totalOut {
+  animation: totalOut 300ms ease-out both;
+}
+
+/* Post-flight flip: back face -> front face, starting only after the
+   card's own flight ends (delay = stagger + full deal duration). */
+.dealFlipDo {
+  animation: dealFlipIn 420ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
+  animation-delay: var(--deal-flip-delay, 540ms);
+}
+
+@keyframes dealFlipIn {
+  from {
+    transform: rotateY(0deg);
+  }
+
+  to {
+    transform: rotateY(180deg);
+  }
+}
+
+/* Dealer hole-card flip — the card lifts slightly mid-flip */
+.flipWrap {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 750ms cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.flipFaceUp {
+  transform: rotateY(180deg);
+  animation: flipLift 750ms ease-out;
+}
+
+@keyframes flipLift {
+  0% {
+    scale: 1;
+  }
+
+  42% {
+    scale: 1.09;
+  }
+
+  100% {
+    scale: 1;
+  }
+}
+
+.flipFace {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flipBack {
+  transform: rotateY(0deg);
+}
+
+.flipFront {
+  transform: rotateY(180deg);
+}
+
+/* Result popup — shared, dead-centre overlay (global.css). The state
+   (win/lose/push) only recolours the border + title; nothing moves. */
+.resultPopup {
+  composes: ui-win-popup from global;
+  padding: 16px 22px;
+}
+
+.resultPopupTitle {
+  composes: ui-win-popup-title from global;
+}
+
+.resultPopupAmount {
+  composes: ui-win-popup-amount from global;
+}
+
+.resultPopupMult {
+  composes: ui-win-popup-mult from global;
+}
+
+.resultPopupDivider {
+  composes: ui-win-popup-divider from global;
+}
+
+/* win — scoped so the state border beats the shared default (the only
+   popup variant: loss/push popups were removed globally) */
+.resultPopup.popupWin {
+  border-color: rgba(0, 231, 1, 0.90);
+}
+
+.popupWin .resultPopupTitle {
+  color: var(--accent-green);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+  }
+
+  .gameStage {
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 760px) {
+  .handsRow {
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .dealerArea {
+    top: 64px;
+  }
+
+  .deckEntity {
+    right: 10px;
+  }
+
+  .deckEntityImg {
+    width: 86px;
+  }
+}
+
+@media (max-width: 600px) {
+
+  /* Result popup stays a true dead-centre overlay on mobile too */
+  .resultPopup {
+    max-width: calc(100% - 32px);
+  }
+
+  .playerArea {
+    bottom: 0px;
+    height: 200px;
+  }
+
+  .dealerArea {
+    top: 56px;
+    height: 160px;
+  }
+
+  .ribbon {
+    top: 54%;
+    width: min(420px, 90%);
+  }
+
+  /* Mobile deck image */
+  .deckEntity {
+    right: 10px;
+  }
+
+  .deckEntityImg {
+    width: 76px;
+  }
+}
+
+@media (max-width: 420px) {
+  .cardSlot {
+    width: 96px;
+    height: 157px;
+  }
+
+  .card {
+    width: 96px;
+    height: 157px;
+    border-radius: 10px;
+  }
+
+  .rank {
+    font-size: 28px;
+  }
+
+  .centerSuitIconLarge {
+    width: 50px;
+    height: 50px;
+  }
+
+  .playerArea {
+    bottom: 0px;
+  }
+
+  .deckEntityImg {
+    width: 66px;
+  }
+}
