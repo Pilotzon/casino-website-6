@@ -96,7 +96,7 @@ action buttons) and the row buttons turn **icon-only** — 44 × 44 tiles with
   board in jsdom (see `frontend/tests/crash-board/`) — it drives the real
   component (polling, cash-out, render pump) against a scripted server and
   measures what the board actually renders, including the history pills' slide.
-* `npm run test:ui` (in `frontend/`) runs the 418-check site UI suite
+* `npm run test:ui` (in `frontend/`) runs the 419-check site UI suite
   (`frontend/tests/site-ui/`): the toast kinds (and that they stack), the
   games-page filter row, the admin panel's phone layout, the bet-button hazard
   badge on **every** game, the Scroll-up pill, the bypass permission in the UI,
@@ -104,7 +104,7 @@ action buttons) and the row buttons turn **icon-only** — 44 × 44 tiles with
   box with its Today panel, the dealt-blackjack reveal + bet-button gate, the
   Dice/Limbo history overlay, the Blackjack deal chain / centred hand /
   travelling total label (appearing with the FIRST card, at the one-card
-  position) with the symmetric table bands and the flattened deal diagonal,
+  position) with the symmetric visible table bands and the deck-origin deal,
   the universal pills row (marker in-row, self-fading exit), the Roulette
   history stack, and the Slide/Hilo scaffolding shells.
 * `npm test` runs both frontend suites.
@@ -294,20 +294,20 @@ The round is server-authoritative (`processBlackjack` / `blackjackAction` in
   counted and counts its fresh card on landing. In other words the label
   updates the instant a card's MOVEMENT finishes arriving — never after its
   flip.
-* **The table's vertical bands are symmetric, always.** The gap below the
-  player's rightmost card and the gap above the dealer's total label are ONE
-  shared number in every state and hand configuration (`tableVerticalGap` in
-  `Blackjack.jsx`): each side's centred gap is computed, the tightest one
-  (never below a small minimum) is applied to both outer edges, so the dealer
-  block hangs top-banded and every player hand bottom-banded. The dealer pill
-  is therefore TOP-anchored (its inline `top` is the shared band; its bottom
-  edge still lands exactly on the first card's top), while the player pill
-  keeps its bottom anchor.
-* **The deal flies in on a flattened diagonal.** The deck-to-seat vector is
-  scaled by `DEAL_FLATTEN_X = 1.4` / `DEAL_FLATTEN_Y = 0.45` — less than half
-  the vertical drop, 40% more horizontal run — so each card reads as a mostly
-  horizontal slide with a slight vertical component instead of the old steep
-  dive.
+* **The table's vertical bands are symmetric, always — as seen on screen.**
+  The VISIBLE gap below the player's rightmost card (from the stage's bottom
+  edge) and the visible gap above the dealer's total label (from the stage's
+  top edge) are ONE shared number in every state and hand configuration:
+  `tableVerticalGap` computes each hand's tightest centred band (never below
+  a small minimum) for the player fan, and the dealer pill's in-fan `top` is
+  shifted by the measured difference between the two fans' stage insets
+  (`playerInset - dealerInset`), so what is equal is what the eye measures.
+  The dealer pill is TOP-anchored (its bottom edge still lands exactly on the
+  first card's top), the player pill keeps its bottom anchor.
+* **Every card starts on the deck entity.** The flight vector is the
+  measured deck centre minus the seat — one shared origin for dealer and
+  player cards alike (an experiment with reshaped/flattened diagonals was
+  reverted: it moved the start off the deck and made the two sides differ).
 * **The "Blackjack pays 3:2, Insurance pays 2:1" sign is table art, not a
   gameplay layer.** It carries the lowest z-index of the table (`z-index: 1`)
   while the dealer and player areas stack above it (`z-index: 2`, deck 10,

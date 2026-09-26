@@ -1024,11 +1024,14 @@ async function main() {
       && /\.playerArea\s*\{[^}]*z-index:\s*2/.test(bjCss),
       'the pays-3:2 sign is the lowest gameplay layer — both card areas stack above it');
     const bjJsxFlat = readCss('src/components/games/Blackjack.jsx');
-    ok(/const DEAL_FLATTEN_X = 1\.4;/.test(bjJsxFlat) && /const DEAL_FLATTEN_Y = 0\.45;/.test(bjJsxFlat)
-      && /\* DEAL_FLATTEN_X\)/.test(bjJsxFlat) && /\* DEAL_FLATTEN_Y\)/.test(bjJsxFlat),
-      'the deal flight is flattened: <half the vertical, 1.4x the horizontal');
-    ok(/var\(--deal-from-x, 320px\), var\(--deal-from-y, -120px\)/.test(bjCss),
-      'and the pre-measurement fallback vector is the same flat diagonal');
+    ok(/const fromX = Math\.round\(deckCx - geom\.w \/ 2 - seatX\);/.test(bjJsxFlat)
+      && /const fromY = Math\.round\(deckCy - geom\.h \/ 2 - seatY\);/.test(bjJsxFlat)
+      && !/DEAL_FLATTEN/.test(bjJsxFlat),
+      'every card starts flying from the deck entity centre — one shared origin for dealer and player (no reshaped diagonal)');
+    ok(/var\(--deal-from-x, 230px\), var\(--deal-from-y, -270px\)/.test(bjCss),
+      'and the pre-measurement fallback vector is the same deck-origin diagonal');
+    ok(/playerInset - dealerInset/.test(bjJsxFlat),
+      'the dealer band is shifted by the measured stage insets, so the VISIBLE gap above the dealer label equals the visible gap below the player hand');
     ok(!/translateX\(-50%\)/.test(pillRule) && !/left:\s*50%/.test(pillRule),
       '...never by a centred translate (it is no longer centred over the hand)');
     const bjJsx = readCss('src/components/games/Blackjack.jsx');

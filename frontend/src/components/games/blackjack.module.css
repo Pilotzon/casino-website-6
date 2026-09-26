@@ -501,7 +501,7 @@
 @keyframes dealIn {
   0% {
     opacity: 0;
-    transform: translate(var(--deal-from-x, 320px), var(--deal-from-y, -120px));
+    transform: translate(var(--deal-from-x, 230px), var(--deal-from-y, -270px));
   }
 
   12% {

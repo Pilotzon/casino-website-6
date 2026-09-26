@@ -79,14 +79,6 @@ const readCardGeom = (stage) => {
   };
 };
 
-// Deal-trajectory shaping: the raw vector runs deck-centre -> seat. The
-// vertical component is kept under half and the horizontal one stretched, so
-// every card reads as a mostly-horizontal slide with a slight vertical drop
-// instead of the old steep ~45-degree diagonal. Touch ONLY these two numbers
-// to retune the angle — see dealFromVars().
-const DEAL_FLATTEN_X = 1.4;
-const DEAL_FLATTEN_Y = 0.45;
-
 // The total label's height (24px in blackjack.module.css); the DOM-measured
 // value wins when one exists (measureDealGeom).
 const LABEL_H_FALLBACK = 24;
@@ -187,13 +179,12 @@ const cardLayout = (geom, fan, count, index, y0Of) => {
 //     + index * overlap — the same numbers Card renders with, so seats are
 //     exact by construction.
 //  3. dealFromVars() returns the flight's start vector: deck-centre minus
-//     seat top-left, with the vertical component scaled down and the
-//     horizontal one scaled up (DEAL_FLATTEN_*) — a flattened diagonal.
+//     seat top-left — every card (dealer or player) starts on the deck
+//     entity's centre.
 //  4. The vector rides to CSS as --deal-from-x/--deal-from-y on .cardMotion;
 //     the dealIn keyframes translate from it (falling back to the old
 //     230/-270px constants before the first measurement lands).
-// TO RETUNE: touch ONLY DEAL_FLATTEN_X/Y above — smaller Y flattens the
-// drop, bigger X stretches the horizontal run, for every card at once.
+// The origin is the measured deck entity itself; there is nothing to retune.
 function dealFromVars(dealGeom, fanGeom, index) {
   if (!dealGeom || !fanGeom) return undefined;
   const geom = dealGeom.geom ?? CARD_GEOM_FALLBACK;
@@ -204,10 +195,10 @@ function dealFromVars(dealGeom, fanGeom, index) {
   const seatY = fanGeom.y + lay.seatY(index);
   const deckCx = dealGeom.deck.x + dealGeom.deck.w / 2;
   const deckCy = dealGeom.deck.y + dealGeom.deck.h / 2;
-  // scaled, not nudged: less vertical drop, more horizontal run (flattened
-  // diagonal — see DEAL_FLATTEN_*)
-  const fromX = Math.round((deckCx - geom.w / 2 - seatX) * DEAL_FLATTEN_X);
-  const fromY = Math.round((deckCy - geom.h / 2 - seatY) * DEAL_FLATTEN_Y);
+  // the card's centre starts exactly on the deck entity's centre — the SAME
+  // origin for dealer and player cards (only the seat differs)
+  const fromX = Math.round(deckCx - geom.w / 2 - seatX);
+  const fromY = Math.round(deckCy - geom.h / 2 - seatY);
   return { "--deal-from-x": `${fromX}px`, "--deal-from-y": `${fromY}px` };
 }
 
@@ -433,6 +424,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       deck: rel(deck),
       fanTop: rel(fanTop),
       fansBottom: fanBottomRefs.current.filter(Boolean).map(rel),
+      stageH: s.height,
       // live card size + cascade steps (CSS custom properties, see
       // blackjack.module.css) — measured with the rects so the seats and the
       // flight vectors always agree with what is actually on screen
@@ -489,15 +481,26 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   // The table's one shared outer gap (symmetry rule): the band above the
   // dealer label == the band below every player hand's last card, always.
   const labelH = dealGeom?.labelH > 0 ? dealGeom.labelH : LABEL_H_FALLBACK;
+  // vGap is the player's band inside its fan (below the last card). The two
+  // fans sit at different offsets in the stage (dealer fan ~88px from the
+  // top, player fan ~26px from the bottom), so the dealer pill's in-fan top
+  // is shifted by exactly that difference — what is equal on screen is the
+  // VISIBLE band above the dealer label and below the player's last card.
+  const dealerInset = dealGeom?.fanTop?.y ?? 0;
+  const fb0 = dealGeom?.fansBottom?.[0];
+  const playerInset = fb0 && dealGeom?.stageH > 0
+    ? Math.max(0, dealGeom.stageH - (fb0.y + fb0.h))
+    : 0;
   const vGap = tableVerticalGap(
     cardGeom,
     dealGeom?.fanTop?.h,
-    dealGeom?.fansBottom?.[0]?.h,
+    fb0?.h,
     dealerCount,
     shownHands.map((h, i) => handCount(i, h.length)),
     labelH
   );
-  const dealerY0 = () => vGap + labelH;
+  const dealerTop = vGap + playerInset - dealerInset;
+  const dealerY0 = () => dealerTop + labelH;
   const playerY0 = (fanH) => (n) => fanH - vGap - handSpan(cardGeom, n).h;
   const dealerLay = handLayout(cardGeom, dealGeom?.fanTop, dealerCount, dealerY0());
 
@@ -1266,7 +1269,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                   <div
                     data-dealer-pill="true"
                     className={`${styles.totalPillDark} ${exiting ? styles.totalOut : ""}`}
-                    style={{ right: `${dealerLay.labelRight}px`, top: `${vGap}px` }}
+                    style={{ right: `${dealerLay.labelRight}px`, top: `${dealerTop}px` }}
                   >
                     {handTotalDisplay(
                       shownDealer
