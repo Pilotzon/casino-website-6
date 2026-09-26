@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import usePillSlide from "../../hooks/usePillSlide";
+import usePillFadeOut from "../../hooks/usePillFadeOut";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
 import BetError from "../common/BetError";
@@ -56,6 +57,8 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
   const historyScrollRef = useRef(null);
   // Pill row slides in from the right as one motion on every addition
   const { pillsRef, slideKey, slideFrom } = usePillSlide(history[0]?._pillId ?? null);
+  // the outgoing pill fades itself as it leaves the scroller (no gradient mask)
+  usePillFadeOut(historyScrollRef, slideKey);
 
   // Crash parity (mobile scroller): keep the freshest pill in view
   useEffect(() => {
@@ -398,13 +401,14 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
                 )}
               </div>
             </div>
-          </div>
-          {/* Crash's marker row, identical in every pills game */}
-          <div className={styles.historyMeta}>
-            <button className={styles.historyIcon} type="button" aria-label="My bets">
-              <IconArticle size={18} />
-            </button>
-            <span className={styles.historyYou}>‹ You</span>
+            {/* Same row as the pills — pills left, marker right (the universal
+                rule for every pills game, matching Limbo). */}
+            <div className={styles.historyMeta}>
+              <button className={styles.historyIcon} type="button" aria-label="My bets">
+                <IconArticle size={18} />
+              </button>
+              <span className={styles.historyYou}>‹ You</span>
+            </div>
           </div>
 
           <div className={styles.wheelStage}>

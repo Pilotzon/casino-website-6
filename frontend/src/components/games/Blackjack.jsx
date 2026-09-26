@@ -39,29 +39,59 @@ const BJ_ACTION_URL = "/api/games/blackjack/action";
 
 // animation timings (match CSS)
 const DEAL_FLIGHT_MS = 400; // one card's flight, deck -> seat (dealIn)
-// Step EQUALS flight: strictly sequential, zero idle — the next card starts
-// the instant the previous one arrives (P0 [0,600], D0 [600,1200], …).
-const DEAL_STEP_MS = 500;
+// ONE card at a time, chained on the FLIP: the next card starts moving the
+// instant the previous card ARRIVES and its deal-flip begins — not partway
+// through that flip, not after it. A step is therefore exactly one flight:
+//   P0 flies [0,400] → flip [400,820]   |  D0 flies [400,800] → flip [800,1220]
+//   D0 starts at 400 = the moment P0's flip begins, and so on for every card.
+// (Each card's flip therefore runs while the NEXT card is already on its way.)
+const DEAL_STEP_MS = DEAL_FLIGHT_MS;
 const DEAL_EXTRA_MS = 150; // lead-in before mid-round cards (hits, draws)
 const DEAL_FLIP_MS = 420; // post-flight flip (dealFlipIn)
 const FLIP_MS = 750; // hole-card reveal flip (flipWrap transition)
+// Two frames of grace after a flip-based wait: the settled styling must land
+// once the card is FULLY face-up — never on the flip's last frame.
+const REVEAL_GRACE_MS = 40;
 // Exit flight (new bet): one card's out-animation (cardOut) + the
 // left-to-right stagger between the cards of a single hand
 const EXIT_MS = 200;
 const EXIT_STAGGER_MS = 100;
 
-// Card geometry (match blackjack.module.css) — shared by the fan layout
-// AND the deck-origin math so they can never drift apart.
-const CARD_W = 114;
-const CARD_H = 186;
-const OVERLAP_X = 39; // fan cascade step, x (slot left = index * this)
-const OVERLAP_Y = 15; // fan cascade step, y (slot top = index * this)
+// Card geometry — the LIVE numbers are read from the CSS custom properties
+// on the stage (--bj-card-w/h, --bj-overlap-x/y) so the fan seats AND the
+// deck-origin math below can never drift from blackjack.module.css at any
+// responsive size (phones shrink the cards). These are only the fallbacks
+// for the very first paint, before the first measurement lands.
+const CARD_GEOM_FALLBACK = { w: 114, h: 186, overlapX: 39, overlapY: 15 };
 
-// Deal-origin tuning knobs: measured deck-centre minus seat position, plus
-// this nudge (px). Touch ONLY these two numbers to shift where every card
-// visually starts flying from — see the guide in dealFromVars().
-const DEAL_ORIGIN_NUDGE_X = 0;
-const DEAL_ORIGIN_NUDGE_Y = 0;
+const readCardGeom = (stage) => {
+  if (!stage?.ownerDocument?.defaultView?.getComputedStyle) return CARD_GEOM_FALLBACK;
+  const cs = stage.ownerDocument.defaultView.getComputedStyle(stage);
+  const num = (name, fallback) => {
+    const v = Number.parseFloat(cs.getPropertyValue(name));
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  };
+  return {
+    w: num("--bj-card-w", CARD_GEOM_FALLBACK.w),
+    h: num("--bj-card-h", CARD_GEOM_FALLBACK.h),
+    overlapX: num("--bj-overlap-x", CARD_GEOM_FALLBACK.overlapX),
+    overlapY: num("--bj-overlap-y", CARD_GEOM_FALLBACK.overlapY),
+  };
+};
+
+// Deal-trajectory shaping: the raw vector runs deck-centre -> seat. The
+// vertical component is kept under half and the horizontal one stretched, so
+// every card reads as a mostly-horizontal slide with a slight vertical drop
+// instead of the old steep ~45-degree diagonal. Touch ONLY these two numbers
+// to retune the angle — see dealFromVars().
+const DEAL_FLATTEN_X = 1.4;
+const DEAL_FLATTEN_Y = 0.45;
+
+// The total label's height (24px in blackjack.module.css); the DOM-measured
+// value wins when one exists (measureDealGeom).
+const LABEL_H_FALLBACK = 24;
+// The shared outer gap never collapses below this, whatever the hand sizes.
+const VGAP_MIN = 4;
 
 // Sequential deal order: P0, D0, P1, D1 — one card flies at a time.
 // Mid-round cards (hits, splits, dealer draws) use a short lead-in.
@@ -76,29 +106,108 @@ function playerDealDelay(handIdx, i) {
   return DEAL_EXTRA_MS + handIdx * DEAL_STEP_MS;
 }
 
+// ── Hand layout: the ONE place a hand's geometry is defined ────────────────
+// A hand is a single GROUP: `count` cards, card i seated at
+//   (x0 + i·overlapX, y0 + i·overlapY)
+// with the group centred in its fan BOTH ways. Growing the group from n to
+// n+1 cards therefore moves the cards already on the table half a cascade
+// step LEFT and half a step UP while the incoming card flies to the seat that
+// completes the group — one motion, starting the moment that card starts
+// moving (see planHandLayouts + the .cardSlot transition in the stylesheet).
+// The total label hangs off the same numbers: its right edge on the LAST
+// card's right edge, its bottom edge on the FIRST card's top edge (the cards
+// sit directly beneath it, no gap), so it travels with the hand for free.
+// The full span a hand of `count` cards occupies (card + cascade steps).
+const handSpan = (geom, count) => {
+  const g = geom ?? CARD_GEOM_FALLBACK;
+  const n = Math.max(1, count || 1);
+  return { w: g.w + (n - 1) * g.overlapX, h: g.h + (n - 1) * g.overlapY };
+};
+
+// ONE outer gap for the whole table, in every state / hand configuration:
+// the band above the dealer's total label and the band below every player
+// hand's last card are always the same number. Each side's "centred" gap is
+// what plain vertical centring would give it; the table takes the TIGHTEST
+// of those (never below VGAP_MIN) and applies it on BOTH outer edges — the
+// tighter side stays exactly where centring put it, the looser side closes
+// in to match, so the two bands are equal by construction.
+function tableVerticalGap(geom, fanTopH, fanBottomH, dealerCards, playerCards, labelH) {
+  const gaps = [];
+  if (Number.isFinite(fanTopH)) {
+    gaps.push((fanTopH - handSpan(geom, dealerCards).h) / 2 - labelH);
+  }
+  if (Number.isFinite(fanBottomH)) {
+    const counts = playerCards?.length ? playerCards : [1];
+    for (const c of counts) gaps.push((fanBottomH - handSpan(geom, c).h) / 2);
+  }
+  if (!gaps.length) return VGAP_MIN;
+  return Math.max(VGAP_MIN, Math.min(...gaps));
+}
+
+function handLayout(geom, fan, count, y0Override) {
+  const g = geom ?? CARD_GEOM_FALLBACK;
+  const n = Math.max(1, count || 1);
+  const stepsX = (n - 1) * g.overlapX;
+  const stepsY = (n - 1) * g.overlapY;
+  const width = g.w + stepsX;
+  const height = g.h + stepsY;
+  const fanW = Number.isFinite(fan?.w) ? fan.w : width;
+  const fanH = Number.isFinite(fan?.h) ? fan.h : height;
+  const x0 = (fanW - width) / 2;
+  const y0 = Number.isFinite(y0Override) ? y0Override : (fanH - height) / 2;
+  return {
+    n,
+    x0,
+    y0,
+    width,
+    height,
+    seatX: (i) => x0 + i * g.overlapX,
+    seatY: (i) => y0 + i * g.overlapY,
+    // the label, as CSS offsets from the fan's right / bottom edge
+    labelRight: fanW - (x0 + width),
+    labelBottom: fanH - y0,
+  };
+}
+
+// The layout a card is RENDERED in: the hand's own count, except that a card
+// still on its way (its index is not counted yet) is already seated where it
+// will LAND — so the group re-centres UNDER it and it never jumps when the
+// hand steps up to include it.
+const cardLayout = (geom, fan, count, index, y0Of) => {
+  const n = index + 1 > count ? index + 1 : count;
+  return handLayout(geom, fan, n, y0Of ? y0Of(n) : undefined);
+};
+
 // HOW THE DEAL SOURCE POSITION WORKS (step-by-step):
 //  1. stageRef/deckRef/fanTopRef/fanBottomRefs mark the stage, the deck
 //     entity, and each fan; measureDealGeom() snapshots their rects
 //     relative to the stage (on mount, every new round, every split — a new
 //     fan mounts — and every window resize).
-//  2. Each card seat is pure math: fan origin + index * OVERLAP — the same
-//     numbers Card uses for its own slot, so seats are exact by construction.
+//  2. Each card seat is pure math (handLayout): the group centred in its fan
+//     + index * overlap — the same numbers Card renders with, so seats are
+//     exact by construction.
 //  3. dealFromVars() returns the flight's start vector: deck-centre minus
-//     seat top-left (the card's centre starts on the deck's centre), plus
-//     DEAL_ORIGIN_NUDGE_*.
+//     seat top-left, with the vertical component scaled down and the
+//     horizontal one scaled up (DEAL_FLATTEN_*) — a flattened diagonal.
 //  4. The vector rides to CSS as --deal-from-x/--deal-from-y on .cardMotion;
 //     the dealIn keyframes translate from it (falling back to the old
 //     230/-270px constants before the first measurement lands).
-// TO RETUNE: touch ONLY DEAL_ORIGIN_NUDGE_X/Y above — positive X shifts the
-// start right, positive Y shifts it down, for every card at once.
+// TO RETUNE: touch ONLY DEAL_FLATTEN_X/Y above — smaller Y flattens the
+// drop, bigger X stretches the horizontal run, for every card at once.
 function dealFromVars(dealGeom, fanGeom, index) {
   if (!dealGeom || !fanGeom) return undefined;
-  const seatX = fanGeom.x + index * OVERLAP_X;
-  const seatY = fanGeom.y + index * OVERLAP_Y;
+  const geom = dealGeom.geom ?? CARD_GEOM_FALLBACK;
+  // the seat the card lands on = the hand's layout the moment it arrives
+  // (its own index counts it — see cardLayout)
+  const lay = handLayout(geom, fanGeom, index + 1);
+  const seatX = fanGeom.x + lay.seatX(index);
+  const seatY = fanGeom.y + lay.seatY(index);
   const deckCx = dealGeom.deck.x + dealGeom.deck.w / 2;
   const deckCy = dealGeom.deck.y + dealGeom.deck.h / 2;
-  const fromX = Math.round(deckCx - CARD_W / 2 - seatX + DEAL_ORIGIN_NUDGE_X);
-  const fromY = Math.round(deckCy - CARD_H / 2 - seatY + DEAL_ORIGIN_NUDGE_Y);
+  // scaled, not nudged: less vertical drop, more horizontal run (flattened
+  // diagonal — see DEAL_FLATTEN_*)
+  const fromX = Math.round((deckCx - geom.w / 2 - seatX) * DEAL_FLATTEN_X);
+  const fromY = Math.round((deckCy - geom.h / 2 - seatY) * DEAL_FLATTEN_Y);
   return { "--deal-from-x": `${fromX}px`, "--deal-from-y": `${fromY}px` };
 }
 
@@ -233,8 +342,15 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
   }, [betAmount, isAuthenticated, user?.balance]);
   const revealTimerRef = useRef(null);
+  // the single "turn the dealt hole card over" timer (own ref: the totals
+  // pass clears its own list and must not swallow this one)
+  const holeRevealTimerRef = useRef(null);
   const dealerTotalTimersRef = useRef([]);
   const playerTotalTimersRef = useRef([]);
+  // one timer per card that still has to START FLYING: each one steps its
+  // hand's layout up so the re-centre glide begins with that card's movement
+  // (see planHandLayouts)
+  const layoutTimersRef = useRef([]);
 
   // ✅ Card deal sound timers (initial deal)
   const dealSoundTimersRef = useRef([]);
@@ -254,12 +370,29 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     handBets: [],
     handOutcomes: [],
 
-    // how many dealer cards the pill counts (the reveal count-up steps it)
+    // how many dealer cards the pill counts (the count-up steps it; a
+    // face-down hole card joins only once it has been turned over)
     dealerShownCount: 0,
     dealerTotal: 0,
-    // per-hand count of player cards the pill counts — a card joins only
-    // after it has been flipped face-up, never while flying or flipping
-    playerShownCounts: [],
+    // per-hand count of cards the player's total label counts. A card joins
+    // the moment it LANDS (its flight ends) — the pill is up and showing the
+    // card the instant it is on the table, never waiting for its flip: on
+    // the opening deal it therefore appears with the FIRST card's one-card
+    // total, and updates as each further card arrives.
+    playerLandedCounts: [],
+
+    // Is the dealer's hole card allowed to show its face? Always true
+    // except while a DEALT blackjack replays its reveal: the hole lands
+    // face-down with the rest of the deal and only turns over once it has
+    // arrived (see applyServerState / holeReveal).
+    holeUp: true,
+
+    // How many cards each hand is LAID OUT for right now (the dealer's hands
+    // plus one entry per player hand). A hand grows the moment a new card
+    // starts flying — the cards already down glide left+up to re-centre the
+    // group under it, and the total label glides with them (see handLayout
+    // and planHandLayouts).
+    handLayouts: { dealer: 1, hands: [1] },
 
     settled: false,
     payout: 0,
@@ -300,6 +433,13 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       deck: rel(deck),
       fanTop: rel(fanTop),
       fansBottom: fanBottomRefs.current.filter(Boolean).map(rel),
+      // live card size + cascade steps (CSS custom properties, see
+      // blackjack.module.css) — measured with the rects so the seats and the
+      // flight vectors always agree with what is actually on screen
+      geom: readCardGeom(stage),
+      // the total label's own height — the symmetry gap is measured to ITS
+      // top edge; 0 in layout-less environments -> LABEL_H_FALLBACK
+      labelH: stage.querySelector("[data-dealer-pill]")?.offsetHeight || 0,
     });
   };
 
@@ -316,7 +456,14 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
   const bet = useMemo(() => Number.parseFloat(betAmount) || 0, [betAmount]);
 
-  const canDeal = !ui.busy && (ui.phase === "idle" || ui.phase === "settled");
+  // The bet button is armed by the ROUND being over for the eye, not by the
+  // response having landed: after a Stand (and after every other settle) the
+  // dealer's cards are still flying and flipping and the result is not on
+  // screen yet, so the button stays disabled until the reveal has fired —
+  // only then may a new bet be placed. (Betting mid-dealer-draw also let a
+  // new deal wipe the cards while the old round was still being drawn.)
+  const revealDone = ui.showResult;
+  const canDeal = !ui.busy && (ui.phase === "idle" || (ui.phase === "settled" && revealDone));
   const canAct = !ui.busy && ui.phase === "playerTurn" && !ui.settled;
 
   // exit render: while a new bet clears the table, both areas render the
@@ -324,6 +471,35 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   const exiting = ui.exiting;
   const shownDealer = exiting ? exiting.dealer ?? [] : ui.dealer;
   const shownHands = exiting ? exiting.playerHands ?? [[]] : ui.playerHands;
+
+  // Live card size + cascade steps (measured from the CSS custom properties,
+  // see readCardGeom) — the seats, the deal-origin vectors and the total
+  // label all use exactly these numbers (see handLayout).
+  const cardGeom = dealGeom?.geom ?? CARD_GEOM_FALLBACK;
+
+  // How many cards each hand is laid out for RIGHT NOW (see planHandLayouts).
+  // Clamped to the cards actually on the table so a stale count can never seat
+  // a card that is not there; the exit snapshot carries its own counts.
+  const layoutCounts = exiting?.layouts ?? ui.handLayouts;
+  const handCount = (hIdx, len) =>
+    len ? Math.min(Math.max(1, Number(layoutCounts?.hands?.[hIdx]) || 1), len) : 1;
+  const dealerCount = shownDealer.length
+    ? Math.min(Math.max(1, Number(layoutCounts?.dealer) || 1), shownDealer.length)
+    : 1;
+  // The table's one shared outer gap (symmetry rule): the band above the
+  // dealer label == the band below every player hand's last card, always.
+  const labelH = dealGeom?.labelH > 0 ? dealGeom.labelH : LABEL_H_FALLBACK;
+  const vGap = tableVerticalGap(
+    cardGeom,
+    dealGeom?.fanTop?.h,
+    dealGeom?.fansBottom?.[0]?.h,
+    dealerCount,
+    shownHands.map((h, i) => handCount(i, h.length)),
+    labelH
+  );
+  const dealerY0 = () => vGap + labelH;
+  const playerY0 = (fanH) => (n) => fanH - vGap - handSpan(cardGeom, n).h;
+  const dealerLay = handLayout(cardGeom, dealGeom?.fanTop, dealerCount, dealerY0());
 
   const activeHand = ui.playerHands?.[ui.activeHandIndex] ?? [];
 
@@ -399,29 +575,95 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     playerTotalTimersRef.current = [];
   };
 
-  // Steps a hand's total the instant a card finishes flipping face-up
-  // (flight + flip). Never counts flying, flipping, or face-down cards.
-  const schedulePlayerTotalStep = (handIdx, atMs, newShown) => {
+  const clearLayoutTimers = () => {
+    layoutTimersRef.current.forEach((t) => clearTimeout(t));
+    layoutTimersRef.current = [];
+  };
+
+  // ── Hand re-centring ────────────────────────────────────────────────────
+  // A hand grows when a new card STARTS FLYING, never when it lands: each
+  // card beyond what the hand already lays out gets one timer at that card's
+  // own flight start, which steps the hand's layout count up. The cards
+  // already on the table are rendered from that count (see handLayout), so
+  // they glide left+up into the re-centred group during exactly the time the
+  // new card travels toward them — and the total label, hanging off the same
+  // numbers, travels with them.
+  // `ui` is the state BEFORE this response: a dealer draw or a hit leaves the
+  // cards already down where they are and only the fresh ones step the hand up.
+  const planHandLayouts = (gs, shiftMs, { initialDeal } = {}) => {
+    const prevDealer = initialDeal ? 0 : (ui.dealer?.length ?? 0);
+    const prevHands = initialDeal ? [] : (ui.playerHands ?? []);
+    const dealerCards = (gs.dealerHand ?? []).length;
+    const hands = gs.playerHands ?? [[]];
+
+    const plan = (prevLen, len) => {
+      if (!len) return { start: 0, steps: [] };
+      const start = Math.min(Math.max(prevLen || 0, 1), len);
+      const steps = [];
+      for (let i = start; i < len; i++) steps.push(i);
+      return { start, steps };
+    };
+
+    const dealerPlan = plan(prevDealer, dealerCards);
+    const handPlans = hands.map((hand, hIdx) => plan(prevHands[hIdx]?.length ?? 0, hand?.length ?? 0));
+
+    clearLayoutTimers();
+
+    dealerPlan.steps.forEach((i) => {
+      layoutTimersRef.current.push(
+        setTimeout(() => {
+          setUi((prev) => ({ ...prev, handLayouts: { ...prev.handLayouts, dealer: i + 1 } }));
+        }, dealerDealDelay(i) + shiftMs)
+      );
+    });
+
+    handPlans.forEach((p, hIdx) => {
+      p.steps.forEach((i) => {
+        layoutTimersRef.current.push(
+          setTimeout(() => {
+            setUi((prev) => {
+              const counts = [...(prev.handLayouts?.hands ?? [])];
+              counts[hIdx] = i + 1;
+              return { ...prev, handLayouts: { ...prev.handLayouts, hands: counts } };
+            });
+          }, playerDealDelay(hIdx, i))
+        );
+      });
+    });
+
+    // the counts the FIRST render of this state uses: every hand that still
+    // has cards keeps the layout it already had (it is only stepping up when
+    // the next card moves); a fresh round starts at its first card
+    return { dealer: dealerPlan.start, hands: handPlans.map((p) => p.start) };
+  };
+
+  // Steps a hand's total the instant a card LANDS (its flight ends). Never
+  // counts a card that is still flying — and the pill appears with the first
+  // card that lands, not with the second card of the deal.
+  const schedulePlayerTotalStep = (handIdx, atMs, newCount) => {
     playerTotalTimersRef.current.push(
       setTimeout(() => {
         setUi((prev) => {
-          const counts = [...(prev.playerShownCounts ?? [])];
-          counts[handIdx] = Math.max(counts[handIdx] ?? 0, newShown);
-          return { ...prev, playerShownCounts: counts };
+          const counts = [...(prev.playerLandedCounts ?? [])];
+          counts[handIdx] = Math.max(counts[handIdx] ?? 0, newCount);
+          return { ...prev, playerLandedCounts: counts };
         });
       }, atMs)
     );
   };
 
-  // Initial deal: P0, D0, P1 join their pills as each flip completes (the
-  // hole card stays out of the dealer total until the reveal flips it).
+  // Initial deal: every card joins its label as it LANDS. The player's pill
+  // therefore appears with the first card (one-card total) and counts the
+  // second as it arrives; the dealer's pill appears the same way, but its
+  // face-down hole card stays out of the total until the reveal turns it over
+  // (see scheduleDealerTotalCountUp).
   const scheduleInitialTotalCountUps = (gs) => {
     clearDealerTotalTimers();
     clearPlayerTotalTimers();
 
     const p0 = (gs?.playerHands ?? [[]])[0]?.length ?? 0;
     for (let i = 0; i < p0; i++) {
-      schedulePlayerTotalStep(0, playerDealDelay(0, i) + DEAL_FLIGHT_MS + DEAL_FLIP_MS, i + 1);
+      schedulePlayerTotalStep(0, playerDealDelay(0, i) + DEAL_FLIGHT_MS, i + 1);
     }
 
     const dealerCount = (gs?.dealerHand ?? []).length;
@@ -432,7 +674,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
             ...prev,
             dealerShownCount: Math.max(prev.dealerShownCount ?? 0, 1),
           }));
-        }, dealerDealDelay(0) + DEAL_FLIGHT_MS + DEAL_FLIP_MS)
+        }, dealerDealDelay(0) + DEAL_FLIGHT_MS)
       );
     }
   };
@@ -472,10 +714,32 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     }
   };
 
-  const scheduleDealerRevealSounds = ({ gs, hadHoleCardHidden, shift = 0 }) => {
+  // holeRevealAt (ms): a DEALT blackjack whose hole card flips as part of the
+  // initial deal. The deal's own card swishes are already scheduled by
+  // scheduleDealSounds, so this only adds the flip — at the exact moment the
+  // hole has landed and starts turning over.
+  const scheduleDealerRevealSounds = ({ gs, hadHoleCardHidden, shift = 0, holeRevealAt = null }) => {
     clearDealerSoundTimers();
 
     const dealerCount = (gs?.dealerHand ?? []).length;
+
+    if (holeRevealAt != null) {
+      dealerSoundTimersRef.current.push(
+        setTimeout(() => {
+          sfx.play("flip", { volume: 1 });
+        }, holeRevealAt)
+      );
+
+      for (let i = 2; i < dealerCount; i++) {
+        dealerSoundTimersRef.current.push(
+          setTimeout(() => {
+            sfx.play("card", { volume: 1 });
+          }, dealerDealDelay(i) + shift)
+        );
+      }
+
+      return;
+    }
 
     if (hadHoleCardHidden) {
       dealerSoundTimersRef.current.push(
@@ -503,7 +767,9 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     }
   };
 
-  const scheduleDealerTotalCountUp = ({ gs, hadHoleCardHidden, shift = 0 }) => {
+  // holeRevealEnd (ms): end of a DEALT hole-card reveal (see scheduleReveal).
+  // The second dealer card of a dealt blackjack joins the pill only then.
+  const scheduleDealerTotalCountUp = ({ gs, hadHoleCardHidden, shift = 0, holeRevealEnd = 0 }) => {
     clearDealerTotalTimers();
 
     const dealer = (gs.dealerHand ?? []).map(toUiCard).filter(Boolean);
@@ -539,7 +805,12 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     }
 
     for (let i = 1; i < dealer.length; i++) {
-      const delay = i < 2 ? DEAL_EXTRA_MS + shift : dealerDealDelay(i) + DEAL_FLIGHT_MS + DEAL_FLIP_MS + shift;
+      // card #2 IS the hole card: it joins the pill only once it is face-up —
+      // at the end of its reveal flip — never while it is still turning over.
+      // Every other dealer card counts as it lands, like the player's.
+      const delay = i < 2
+        ? (holeRevealEnd || DEAL_EXTRA_MS + shift)
+        : dealerDealDelay(i) + DEAL_FLIGHT_MS + shift;
 
       dealerTotalTimersRef.current.push(
         setTimeout(() => {
@@ -552,7 +823,15 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     }
   };
 
-  const scheduleReveal = ({ gs, outcomes, payout, hadHoleCardHidden, shift = 0, playerFlipEnd = null }) => {
+  const scheduleReveal = ({
+    gs,
+    outcomes,
+    payout,
+    hadHoleCardHidden,
+    shift = 0,
+    playerFlipEnd = null,
+    holeRevealEnd = 0,
+  }) => {
     if (revealTimerRef.current) {
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
@@ -561,7 +840,8 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     const { status, payout: summaryPayout } = summarizeResult(outcomes, payout);
 
     // the reveal waits for every card still animating: the hole flip, any
-    // dealer draws flipping face-up one by one, and — ONLY when this very
+    // dealer draws flipping face-up one by one, a hole card revealed as part
+    // of the INITIAL deal (a dealt blackjack) and — ONLY when this very
     // action dealt a player card (double-down) — that card's flip.
     // Outcomes land once all totals are final, but a settle with no new
     // player card (stand) never idles on a flip that doesn't exist.
@@ -571,7 +851,12 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       : 0;
     const playerNewEnd = playerFlipEnd ?? 0;
 
-    const delay = Math.max(hadHoleCardHidden ? FLIP_MS + shift : 0, drawEnd, playerNewEnd);
+    // A reveal that ends on a CSS animation (the hole flip) gets a couple of
+    // frames of grace: the settled colours/outlines must land AFTER the card
+    // is fully face-up, never on its last frame.
+    const flipWait = Math.max(hadHoleCardHidden ? FLIP_MS + shift : 0, holeRevealEnd);
+
+    const delay = Math.max(flipWait, drawEnd, playerNewEnd) + REVEAL_GRACE_MS;
 
     revealTimerRef.current = setTimeout(() => {
       if (status === "win") sfx.play("win", { volume: 1 });
@@ -593,7 +878,10 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   // instant the player's new card ARRIVES — never mushed with it, and
   // never gated on its flip. playerFlipEnd (ms) is set only when this
   // very action dealt a player card whose flip the reveal must await.
-  const applyServerState = (data, { dealerShiftMs = 0, playerFlipEnd = null } = {}) => {
+  // initialDeal marks the FIRST deal of a round (handleDeal): if that deal
+  // already ended the round (a natural on either side) its hole card is
+  // revealed right there, as part of the deal (see holeRevealAt below).
+  const applyServerState = (data, { dealerShiftMs = 0, playerFlipEnd = null, initialDeal = false } = {}) => {
     const gs = data.gameState;
     if (!gs) throw new Error("Invalid server response (missing gameState)");
 
@@ -607,7 +895,30 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     const serverOutcomes = gs.handOutcomes ?? [];
     const serverPayout = gs.payout ?? 0;
 
-    const hadHoleCardHidden = ui.dealer?.some((c) => c?.hidden);
+    // "Was a dealer card face-down?" only means something while the SAME hand
+    // is moving on (hit / stand / double / split settling it). A brand-new
+    // deal replaces the cards, so it never inherits the last round's hole —
+    // otherwise a busted-out round (dealer card left face-down) would make
+    // the next dealt blackjack reveal its hole early.
+    const hadHoleCardHidden = !initialDeal && ui.dealer?.some((c) => c?.hidden);
+
+    // ── A blackjack dealt on the initial deal (either side) ───────────────
+    // The server hands the finished round back with BOTH dealer cards up, but
+    // on the table the hole card is dealt FACE DOWN with the rest of the deal
+    // and is turned over immediately — as soon as it lands, right there in the
+    // deal phase, never waiting for a player turn that is never going to
+    // happen. The flip starts when the card has arrived (deck-origin flight
+    // included, plus the double-down shift when one is in play) and its end is
+    // the moment everything else may react: the loss styling, the outlines,
+    // the dealer's total and the popup all wait for it (scheduleReveal).
+    const holeRevealAt = initialDeal && settled && dealer.length === 2
+      ? dealerDealDelay(1) + DEAL_FLIGHT_MS + Math.max(0, dealerShiftMs)
+      : null;
+    const holeRevealEnd = holeRevealAt != null ? holeRevealAt + FLIP_MS : 0;
+
+    // how many cards each hand is laid out for right now, plus the timers
+    // that step it up at each fresh card's flight start (see planHandLayouts)
+    const handLayouts = planHandLayouts(gs, dealerShiftMs, { initialDeal });
 
     setUi((s) => ({
       ...s,
@@ -641,13 +952,35 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       exiting: null,
       dealerShiftMs: settled ? dealerShiftMs : 0,
 
+      // a dealt blackjack's hole stays face-down until its flip is due
+      holeUp: holeRevealAt == null,
+
+      handLayouts,
+
       ...(settled ? null : { showResult: false, resultStatus: null, resultPayout: 0 }),
     }));
 
     if (settled) {
-      scheduleDealerRevealSounds({ gs, hadHoleCardHidden, shift: dealerShiftMs });
-      scheduleDealerTotalCountUp({ gs, hadHoleCardHidden, shift: dealerShiftMs });
-      scheduleReveal({ gs, outcomes: serverOutcomes, payout: serverPayout, hadHoleCardHidden, shift: dealerShiftMs, playerFlipEnd });
+      scheduleDealerRevealSounds({ gs, hadHoleCardHidden, shift: dealerShiftMs, holeRevealAt });
+      scheduleDealerTotalCountUp({ gs, hadHoleCardHidden, shift: dealerShiftMs, holeRevealEnd });
+      scheduleReveal({
+        gs,
+        outcomes: serverOutcomes,
+        payout: serverPayout,
+        hadHoleCardHidden,
+        shift: dealerShiftMs,
+        playerFlipEnd,
+        holeRevealEnd,
+      });
+    }
+
+    // last: the totals/sounds passes clear their own timer lists, so this
+    // timer is scheduled once everything else has settled (see the ref note)
+    if (holeRevealAt != null) {
+      holeRevealTimerRef.current = setTimeout(() => {
+        holeRevealTimerRef.current = null;
+        setUi((prev) => ({ ...prev, holeUp: true }));
+      }, holeRevealAt);
     }
   };
 
@@ -667,8 +1000,13 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
     }
+    if (holeRevealTimerRef.current) {
+      clearTimeout(holeRevealTimerRef.current);
+      holeRevealTimerRef.current = null;
+    }
     clearDealerTotalTimers();
     clearPlayerTotalTimers();
+    clearLayoutTimers();
     clearDealSoundTimers();
     clearDealerSoundTimers();
 
@@ -677,7 +1015,9 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     // right (200ms apart), all hands starting at the same moment — while
     // every total label fades. The bet request runs DURING the exit; the
     // fresh deal starts the moment BOTH are done (no cards = no wait).
-    const snapshot = { dealer: ui.dealer ?? [], playerHands: ui.playerHands ?? [] };
+    // the snapshot carries the layout counts too: the old cards keep the
+    // seats they were last laid out in while they fly out of the way
+    const snapshot = { dealer: ui.dealer ?? [], playerHands: ui.playerHands ?? [], layouts: ui.handLayouts };
     const maxCards = Math.max(0, snapshot.dealer.length, ...snapshot.playerHands.map((h) => h?.length ?? 0));
     const exitMs = maxCards > 0 ? (maxCards - 1) * EXIT_STAGGER_MS + EXIT_MS : 0;
 
@@ -704,12 +1044,20 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
       // exit finished: counts restart at zero for the fresh deal (batched
       // with the state below, so the pills never flash mid-swap)
-      setUi((s) => ({ ...s, dealerShownCount: 0, playerShownCounts: [] }));
+      setUi((s) => ({ ...s, dealerShownCount: 0, playerLandedCounts: [] }));
 
       scheduleDealSounds(data.gameState);
       scheduleInitialTotalCountUps(data.gameState);
 
-      applyServerState(data);
+      // Both of the player's cards must have finished flipping before the
+      // dealt round may react (the win popup is the loud one): this is the
+      // end of the LAST card's flight + its deal-flip.
+      const p0 = (data.gameState?.playerHands ?? [[]])[0]?.length ?? 0;
+      const playerFlipEnd = p0 > 0
+        ? playerDealDelay(0, p0 - 1) + DEAL_FLIGHT_MS + DEAL_FLIP_MS
+        : 0;
+
+      applyServerState(data, { initialDeal: true, playerFlipEnd });
     } catch (e) {
       console.error("Blackjack deal failed:", e);
       updateBalance?.(prevBalance);
@@ -753,7 +1101,9 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
         const prevLen = ui.playerHands?.[hIdx]?.length ?? 0;
         if (len > prevLen) {
           const flipEnd = playerDealDelay(hIdx, len - 1) + DEAL_FLIGHT_MS + DEAL_FLIP_MS;
-          schedulePlayerTotalStep(hIdx, flipEnd, len);
+          // the label counts it the moment it lands, even though the reveal
+          // (and a double-down's dealer turn) waits for its flip
+          schedulePlayerTotalStep(hIdx, playerDealDelay(hIdx, len - 1) + DEAL_FLIGHT_MS, len);
           if (data.gameState?.status === "finished") {
             playerFlipEnd = flipEnd;
             if (action === "double") dealerShiftMs = flipEnd - DEAL_FLIP_MS;
@@ -770,19 +1120,24 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
         const ck = (c) => c?.id ?? `${c?.r ?? c?.rank}-${c?.s ?? c?.suit}`;
         const hands = data.gameState?.playerHands ?? [];
         const prevHands = ui.playerHands ?? [];
-        const counts = [...(ui.playerShownCounts ?? [])];
+        // a card carried into its new hand is already on the table, so it is
+        // already counted: each hand's label starts at its carried card and
+        // then counts its own fresh card as that card LANDS
+        const counts = [...(ui.playerLandedCounts ?? [])];
         hands.forEach((hand, hIdx) => {
           const prevIds = new Set((prevHands[hIdx] ?? []).map(ck));
           const carry = (hand ?? []).filter((c) => prevIds.has(ck(c))).length;
           counts[hIdx] = carry;
+          for (let i = carry; i < (hand?.length ?? 0); i++) {
+            schedulePlayerTotalStep(hIdx, playerDealDelay(hIdx, i) + DEAL_FLIGHT_MS, i + 1);
+          }
           if ((hand?.length ?? 0) > carry) {
             const flipEnd = playerDealDelay(hIdx, (hand?.length ?? 1) - 1) + DEAL_FLIGHT_MS + DEAL_FLIP_MS;
-            schedulePlayerTotalStep(hIdx, flipEnd, hand.length);
             // split-aces auto-settles: the reveal must await these flips
             playerFlipEnd = Math.max(playerFlipEnd ?? 0, flipEnd);
           }
         });
-        setUi((s) => ({ ...s, playerShownCounts: counts }));
+        setUi((s) => ({ ...s, playerLandedCounts: counts }));
       }
 
       applyServerState(data, { dealerShiftMs, playerFlipEnd });
@@ -899,39 +1254,62 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
             )}
 
             <div className={styles.dealerArea}>
-              {/* Dealer total stays neutral dark — the win/loss highlight
-              belongs only on the settled player's own total pill. The pill
-              appears once the first card has flipped face-up and never
-              counts flying, flipping, or face-down cards. */}
-              {ui.roundId && (ui.dealerShownCount ?? 0) > 0 ? (
-                <div className={`${styles.totalPillDark} ${exiting ? styles.totalOut : ""}`}>
-                  {handTotalDisplay(
-                    shownDealer
-                      .filter((c) => !c?.hidden)
-                      .slice(0, ui.dealerShownCount)
-                  )}
-                </div>
-              ) : null}
-
+              {/* The dealer's hole card occupies slot 1 of the same fan; the
+                  total pill is positioned from the hand's layout — right edge
+                  on the last card, bottom edge on the first card's top. */}
               <div className={styles.fanTop} ref={fanTopRef}>
-                {shownDealer.map((c, i) => (
-                  <Card
-                    key={i === 1 ? `dealer-hole-${ui.roundId ?? "x"}` : cardKey(c, i)}
-                    index={i}
-                    card={c}
-                    hidden={!!c.hidden}
-                    outline="none"
-                    animate
-                    cardBackSrc={cardBackSvg}
-                    flip={i === 1}
-                    faceUp={!c?.hidden}
-                    flipDelayMs={i === 1 ? (ui.dealerShiftMs ?? 0) : 0}
-                    dealDelayMs={dealerDealDelay(i) + (ui.dealerShiftMs ?? 0)}
-                    dealFrom={dealFromVars(dealGeom, dealGeom?.fanTop, i)}
-                    exiting={!!exiting}
-                    exitDelayMs={i * EXIT_STAGGER_MS}
-                  />
-                ))}
+                {/* Dealer total stays neutral dark — the win/loss highlight
+                belongs only on the settled player's own total pill. The pill
+                appears once the first card has flipped face-up and never
+                counts flying, flipping, or face-down cards. */}
+                {ui.roundId && (ui.dealerShownCount ?? 0) > 0 ? (
+                  <div
+                    data-dealer-pill="true"
+                    className={`${styles.totalPillDark} ${exiting ? styles.totalOut : ""}`}
+                    style={{ right: `${dealerLay.labelRight}px`, top: `${vGap}px` }}
+                  >
+                    {handTotalDisplay(
+                      shownDealer
+                        .filter((c) => !c?.hidden)
+                        .slice(0, ui.dealerShownCount)
+                    )}
+                  </div>
+                ) : null}
+
+                {shownDealer.map((c, i) => {
+                  // a card still flying is seated where it will land; the ones
+                  // already down stay in the hand's current layout and glide
+                  // left+up the moment this one moves (cardLayout)
+                  const lay = cardLayout(cardGeom, dealGeom?.fanTop, dealerCount, i, dealerY0);
+                  return (
+                    <Card
+                      key={
+                        i === 1
+                          ? `dealer-hole-${ui.roundId ?? "x"}`
+                          : `${ui.roundId ?? "x"}-${cardKey(c, i)}`
+                      }
+                      index={i}
+                      x={lay.seatX(i)}
+                      y={lay.seatY(i)}
+                      card={c}
+                      hidden={!!c.hidden}
+                      outline="none"
+                      animate
+                      cardBackSrc={cardBackSvg}
+                      flip={i === 1}
+                      // the hole card is the one card whose face is under the
+                      // board's control: hidden for the player's whole turn, and
+                      // on a DEALT result it lands face-down and flips once its
+                      // flight is over (ui.holeUp) — never already-face-up
+                      faceUp={!c?.hidden && (i !== 1 || ui.holeUp)}
+                      flipDelayMs={i === 1 ? (ui.dealerShiftMs ?? 0) : 0}
+                      dealDelayMs={dealerDealDelay(i) + (ui.dealerShiftMs ?? 0)}
+                      dealFrom={dealFromVars(dealGeom, dealGeom?.fanTop, i)}
+                      exiting={!!exiting}
+                      exitDelayMs={i * EXIT_STAGGER_MS}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -942,16 +1320,24 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
             <div className={styles.playerArea}>
               <div className={styles.handsRow}>
                 {shownHands.map((hand, hIdx) => {
-                  // the pill counts only flipped-up cards (shown steps up as
-                  // each flip completes) and hides until the first one lands
-                  const shown = ui.playerShownCounts?.[hIdx] ?? 0;
+                  // the pill counts every card that has LANDED and hides
+                  // until the first one does — so on the opening deal it is up
+                  // (one-card total) as soon as card #1 arrives, at card #1's
+                  // own position, and it then rides the hand's re-centring
+                  // glide into the two-card layout as card #2 arrives
+                  const shown = ui.playerLandedCounts?.[hIdx] ?? 0;
                   const total = handTotalDisplay(hand.slice(0, shown));
                   const outcome = ui.handOutcomes?.[hIdx] ?? null;
 
                   const settled = ui.showResult && ui.phase === "settled";
+                  // A hand of exactly two cards worth 21 is a NATURAL
+                  // blackjack: it wears its own gold state — deliberately
+                  // different from the win green, the push orange and the
+                  // loss red — on the cards AND on the total pill.
+                  const isNatural21 = hand.length === 2 && handTotalUi(hand) === 21;
                   const outline = settled
                     ? outcome === "win"
-                      ? "win"
+                      ? (isNatural21 ? "blackjack" : "win")
                       : outcome === "lose"
                         ? "lose"
                         : outcome === "push"
@@ -961,7 +1347,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
                   const pillTone = settled
                     ? outcome === "win"
-                      ? styles.totalWin
+                      ? (isNatural21 ? styles.totalBlackjack : styles.totalWin)
                       : outcome === "lose"
                         ? styles.totalLose
                         : outcome === "push"
@@ -970,31 +1356,51 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                     : "";
 
                   const fanGeom = dealGeom?.fansBottom?.[hIdx] ?? dealGeom?.fansBottom?.[0] ?? null;
+                  const count = handCount(hIdx, hand.length);
+                  const y0Of = playerY0(fanGeom?.h);
+                  const lay = handLayout(cardGeom, fanGeom, count, y0Of(count));
 
                   return (
                     <div key={hIdx} className={styles.handWrap}>
-                      {ui.roundId && shown > 0 ? (
-                        <div className={`${styles.totalPillPlayer} ${pillTone} ${exiting ? styles.totalOut : ""}`}>
-                          {total}
-                        </div>
-                      ) : null}
-
                       <div className={styles.fanBottom} ref={(el) => { fanBottomRefs.current[hIdx] = el; }}>
-                        {hand.map((c, i) => (
-                          <Card
-                            key={cardKey(c, i)}
-                            index={i}
-                            card={c}
-                            hidden={false}
-                            outline={outline}
-                            animate
-                            cardBackSrc={cardBackSvg}
-                            dealDelayMs={playerDealDelay(hIdx, i)}
-                            dealFrom={dealFromVars(dealGeom, fanGeom, i)}
-                            exiting={!!exiting}
-                            exitDelayMs={i * EXIT_STAGGER_MS}
-                          />
-                        ))}
+                        {/* The total label rides the hand: its right edge on
+                            the last card's right edge, its bottom edge on the
+                            first card's top edge (no gap). Both offsets come
+                            from the same layout as the seats, so it moves with
+                            the hand — and its own right/bottom transition keeps
+                            it in step with the cards' glide. */}
+                        {ui.roundId && shown > 0 ? (
+                          <div
+                            className={`${styles.totalPillPlayer} ${pillTone} ${exiting ? styles.totalOut : ""}`}
+                            style={{ right: `${lay.labelRight}px`, bottom: `${lay.labelBottom}px` }}
+                          >
+                            {total}
+                          </div>
+                        ) : null}
+
+                        {hand.map((c, i) => {
+                          // see cardLayout: a card still on its way is
+                          // already seated where it lands, the rest glide
+                          // under it
+                          const cardLay = cardLayout(cardGeom, fanGeom, count, i, y0Of);
+                          return (
+                            <Card
+                              key={`${ui.roundId ?? "x"}-${cardKey(c, i)}`}
+                              index={i}
+                              x={cardLay.seatX(i)}
+                              y={cardLay.seatY(i)}
+                              card={c}
+                              hidden={false}
+                              outline={outline}
+                              animate
+                              cardBackSrc={cardBackSvg}
+                              dealDelayMs={playerDealDelay(hIdx, i)}
+                              dealFrom={dealFromVars(dealGeom, fanGeom, i)}
+                              exiting={!!exiting}
+                              exitDelayMs={i * EXIT_STAGGER_MS}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   );
@@ -1008,15 +1414,11 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   );
 }
 
-function Card({ index, card, hidden, outline = "none", animate = false, cardBackSrc, flip = false, faceUp = true, dealDelayMs = 0, dealFrom = null, exiting = false, exitDelayMs = 0, flipDelayMs = 0 }) {
+function Card({ index, x = 0, y = 0, card, hidden, outline = "none", animate = false, cardBackSrc, flip = false, faceUp = true, dealDelayMs = 0, dealFrom = null, exiting = false, exitDelayMs = 0, flipDelayMs = 0 }) {
   const r = card?.r;
   const s = card?.s;
   const red = s ? isRedSuit(s) : false;
   const suitSrc = s ? suitIconSrc(s) : null;
-
-  const x = index * OVERLAP_X;
-  const y = index * OVERLAP_Y;
-  const rot = 0;
 
   const showFlip = !!flip;
 
@@ -1050,7 +1452,10 @@ function Card({ index, card, hidden, outline = "none", animate = false, cardBack
     <div
       className={styles.cardSlot}
       style={{
-        transform: `translate(${x}px, ${y}px) rotate(${rot}deg)`,
+        // the seat comes from the hand's layout (handLayout); the stylesheet
+        // transitions this transform, so stepping the layout up glides the
+        // cards already on the table into the re-centred group
+        transform: `translate(${x}px, ${y}px)`,
         zIndex: 10 + index,
       }}
     >
@@ -1059,7 +1464,7 @@ function Card({ index, card, hidden, outline = "none", animate = false, cardBack
         style={exiting ? { animationDelay: `${exitDelayMs}ms` } : animate ? { animationDelay: `${dealDelayMs}ms`, ...(dealFrom || {}) } : undefined}
       >
         <div
-          className={`${styles.card} ${hidden ? styles.cardNoClip : ""} ${outline === "win" ? styles.cardOutlineWin : outline === "lose" ? styles.cardOutlineLose : outline === "push" ? styles.cardOutlinePush : ""
+          className={`${styles.card} ${hidden ? styles.cardNoClip : ""} ${outline === "blackjack" ? styles.cardOutlineBlackjack : outline === "win" ? styles.cardOutlineWin : outline === "lose" ? styles.cardOutlineLose : outline === "push" ? styles.cardOutlinePush : ""
             }`}
         >
           {showFlip ? (

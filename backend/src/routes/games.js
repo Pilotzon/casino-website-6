@@ -380,6 +380,40 @@ router.post(
   GamesController.cashoutRPS
 );
 
+// ------------------------------
+// Slide / Hilo — SCAFFOLDING ONLY
+// ------------------------------
+// Both games are REGISTERED (seeded in config/database.js, listed by
+// GET /api/games and GET /api/games/:name, switchable in the admin panel) and
+// have a frontend shell, but there is no engine behind them yet. Their betting
+// entry points therefore answer 501 with an explicit message — the games exist
+// in the system without pretending a round could be played (or a balance
+// moved). They sit behind the same auth/maintenance gates as every other game
+// so the public surface is identical.
+const gameNotPlayable = (req, res) =>
+  res.status(501).json({
+    success: false,
+    message: "This game is coming soon and cannot be played yet.",
+  });
+
+router.post(
+  "/slide/play",
+  authenticateToken,
+  requireNotMaintenance,
+  requireNotTimedOut,
+  userRateLimit(60, 60000),
+  gameNotPlayable
+);
+
+router.post(
+  "/hilo/play",
+  authenticateToken,
+  requireNotMaintenance,
+  requireNotTimedOut,
+  userRateLimit(60, 60000),
+  gameNotPlayable
+);
+
 // ---- Non-betting authenticated routes ----
 
 // Get user rounds

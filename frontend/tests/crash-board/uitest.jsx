@@ -564,6 +564,48 @@ async function main() {
       'it keeps the stop button styling');
   }
 
+  /* ----------------------------------------------------------------- §14 */
+  console.log('\n=== 14. a new pill slides the whole history row in from the right ===');
+  {
+    // The row glides as ONE motion: the whole container starts shifted right
+    // by exactly the new pill's width — the pill itself is then off-view,
+    // clipped by the scroller — and the keyframes walk the row back to 0
+    // while the older pills shift left with it.
+    const css = readFileSync(resolve(here, '../../src/components/games/crash.module.css'), 'utf8');
+    const jsx = readFileSync(resolve(here, '../../src/components/games/Crash.jsx'), 'utf8');
+    const glob = readFileSync(resolve(here, '../../src/styles/global.css'), 'utf8');
+    ok(/\.historyPills\s*\{[^}]*animation:\s*ui-pills-slide/.test(css),
+      'the pills container carries the row-slide animation');
+    ok(/@keyframes ui-pills-slide\s*\{[^}]*var\(--pill-slide-from/.test(glob),
+      'the keyframes glide the row from that distance back to 0');
+    ok(/usePillSlide\(newestPillKey\)/.test(jsx),
+      'the slide is keyed on the NEWEST pill\'s identity (a capped row never stops sliding)');
+    ok(/--pill-slide-from/.test(jsx), 'the measured distance rides to CSS as --pill-slide-from');
+    ok(/key=\{slideKey\}/.test(jsx), 'the container is remounted per arrival so the animation replays');
+
+    // …and the DOM really arms it when a finished round lands as a pill
+    api.last = { serverNow: Date.now(), growthK: K, cooldownMs: 1000, lastRound: null, history: [] };
+    api.state = {
+      serverNow: Date.now(), growthK: K, cooldownMs: 1000, cooldownEndsAt: null, cooldownRemainingMs: 0,
+      balance: 100, active: false, round: null, lastRound: null, history: [],
+    };
+    const c11 = mountBoard();
+    await sleep(400);
+    ok(!c11.querySelector('.css-histPill:not(.css-histPlaceholder)'),
+      'only the invisible placeholder is on the row before the first round');
+    api.state = {
+      ...api.state,
+      history: [{ roundId: 'rSlide', value: 1.2, won: true, at: 'a' }],
+    };
+    // idle polls are 4s apart (POLL_IDLE_MS), so give the next one room
+    ok(await waitFor(() => !!c11.querySelector('.css-histPill:not(.css-histPlaceholder)'), 6000),
+      'a finished round lands as a real pill');
+    const from = c11.querySelector('.css-historyPills')?.style.getPropertyValue('--pill-slide-from') ?? '';
+    ok(parseFloat(from) > 0,
+      'the row is armed with the new pill\'s width (it starts off-view right)', `--pill-slide-from:${from}`);
+    unmountAll();
+  }
+
 
   console.log(`\n──────────── ${pass} passed, ${fail} failed ────────────\n`);
   process.exit(fail ? 1 : 0);

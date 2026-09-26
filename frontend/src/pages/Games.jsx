@@ -18,6 +18,8 @@ import Roulette from "../components/games/Roulette";
 import Wheel from "../components/games/Wheel";
 import Snakes from "../components/games/Snakes";
 import RPS from "../components/games/RPS";
+import Slide from "../components/games/Slide";
+import Hilo from "../components/games/Hilo";
 
 import styles from "./games.module.css";
 import { LogoMark } from "../components/layout/Navigation";
@@ -52,6 +54,8 @@ import russianRoulettePoster from "../assets/game-posters/RussianRoulette.png";
 import wheelPoster from "../assets/game-posters/wheel.png";
 import snakesPoster from "../assets/game-posters/snakes.png";
 import rpsPoster from "../assets/game-posters/rps.png";
+import slidePoster from "../assets/game-posters/slide.png";
+import hiloPoster from "../assets/game-posters/hilo.png";
 
 // optional fallback (currently unused)
 import fallbackPoster from "../assets/game-posters/fallback.png";
@@ -199,6 +203,28 @@ const GAME_INFO = {
       "Wins stack the multiplier; a loss ends the run.",
     ],
   },
+  /* Scaffolding: the info block is real, the game itself is not playable yet
+     (the betting panel is live on the page and says so). */
+  slide: {
+    genres: ["High risk", "Multiplier"],
+    description:
+      "Send the puck down the track and watch the multiplier climb. Bail out before the run ends and keep what it reached.",
+    howTo: [
+      "Enter your bet amount in the sidebar.",
+      "Press Bet to send the puck down the track.",
+      "Cash out before the run ends to keep the multiplier.",
+    ],
+  },
+  hilo: {
+    genres: ["Cards", "Streak"],
+    description:
+      "Call the next card higher or lower. Every correct call multiplies your payout — one wrong guess ends the round.",
+    howTo: [
+      "Enter your bet amount and press Bet.",
+      "Guess whether the next card is higher or lower.",
+      "Each correct call stacks the multiplier; cash out any time.",
+    ],
+  },
 };
 
 /* Tags for game info header — Provably Fair etc (no wording) */
@@ -217,6 +243,8 @@ const GAME_META_TAGS = {
   wheel: ["RTP: 98.00%", "Multiplier", "Provably Fair", "Casino Originals"],
   snakes: ["RTP: 96.50%", "Board", "Dice", "Casino Originals"],
   rps: ["RTP: 97.00%", "Classic", "Streak", "Provably Fair"],
+  slide: ["RTP: 98.00%", "High Risk", "Multiplier", "Casino Originals"],
+  hilo: ["RTP: 98.00%", "Cards", "Streak", "Casino Originals"],
 };
 
 /* Fake statistics only — allowed to fake this section */
@@ -235,6 +263,8 @@ const GAME_STATS = {
   wheel: { rtp: "98.00%", houseEdge: "2.00%", maxWin: "1000x", volatility: "Switchable", wagered: "$14.7B", bets: "680M" },
   snakes: { rtp: "96.50%", houseEdge: "3.50%", maxWin: "500x", volatility: "Medium", wagered: "$7.9B", bets: "390M" },
   rps: { rtp: "97.00%", houseEdge: "3.00%", maxWin: "14x", volatility: "Medium", wagered: "$5.4B", bets: "280M" },
+  slide: { rtp: "98.00%", houseEdge: "2.00%", maxWin: "5000x", volatility: "Adjustable", wagered: "$0.0B", bets: "0" },
+  hilo: { rtp: "98.00%", houseEdge: "2.00%", maxWin: "1000x", volatility: "Medium", wagered: "$0.0B", bets: "0" },
 };
 
 const GAME_CHALLENGES = {
@@ -252,6 +282,8 @@ const GAME_CHALLENGES = {
   wheel: ["Spin 100 times", "Hit 500x", "Win on high risk"],
   snakes: ["Reach finish in 5 rolls", "Climb 3 ladders", "Avoid snakes for 10 moves"],
   rps: ["Win 10 streak", "Beat the house 5 times", "Play 50 rounds"],
+  slide: ["Reach 10x", "Cash out at 100x", "Play 50 runs"],
+  hilo: ["Win 10 calls in a row", "Hit a 100x streak", "Play 50 rounds"],
 };
 
 /* Detailed description per game for Description tab — real info, not faked (no wording) */
@@ -368,6 +400,22 @@ const GAME_LONG_DESC = {
     howTitle: "How does RPS work?",
     howBody: "RPS is played by placing a bet and picking Rock, Paper or Scissors each turn. Wins stack the multiplier; a loss ends the run.",
   },
+  slide: {
+    intro: "Slide is a coming-soon multiplier game — the page and its controls are live, the board is not.",
+    body: "Slide sends a puck down a track: the further it travels, the higher the multiplier, and the run can end at any moment. Cash out to keep the multiplier you reached.",
+    what: "What is Slide? - A multiplier game in development",
+    whatBody: "Slide is being built on the same provably-fair, server-authoritative system as the rest of the lobby. It is registered and visible while the board is finished.",
+    howTitle: "How will Slide work?",
+    howBody: "Enter a bet and press Bet: the puck is released down the track and the multiplier climbs as it runs. Cash out before the run ends — waiting too long loses the round bet.",
+  },
+  hilo: {
+    intro: "Hilo is a coming-soon card game — the page and its controls are live, the board is not.",
+    body: "Hilo deals one card at a time: call the next one higher or lower. Every correct call stacks the multiplier and you can cash out whenever you like.",
+    what: "What is Hilo? - A card game in development",
+    whatBody: "Hilo is being built on the same provably-fair, server-authoritative system as the rest of the lobby. It is registered and visible while the board is finished.",
+    howTitle: "How will Hilo work?",
+    howBody: "Enter a bet and press Bet to receive the first card, then call higher or lower for each card that follows. Correct calls grow the multiplier; a wrong call ends the round.",
+  },
 };
 
 const SOUND_ENABLED_LS_KEY = "games:soundEnabled";
@@ -407,7 +455,7 @@ function Games() {
   const [statsSubTab, setStatsSubTab] = useState("statistics");
   const [playingCounts] = useState(() => {
     const m = {};
-    const names = ["flip","dice","limbo","plinko","crash","mines","roulette","blackjack","keno","tower","russian_roulette","wheel","snakes","rps"];
+    const names = ["flip","dice","limbo","plinko","crash","mines","roulette","blackjack","keno","tower","russian_roulette","wheel","snakes","rps","slide","hilo"];
     names.forEach((n) => {
       m[n] = Math.floor(120 + Math.random() * 1800);
     });
@@ -508,6 +556,10 @@ function Games() {
       wheel: Wheel,
       snakes: Snakes,
       rps: RPS,
+      // Scaffolding shells: they render the standard betting panel + an
+      // info/placeholder stage; nothing is playable yet.
+      slide: Slide,
+      hilo: Hilo,
     }),
     []
   );
@@ -529,6 +581,8 @@ function Games() {
         "wheel",
         "snakes",
         "rps",
+        "slide",
+        "hilo",
       ]),
     []
   );
@@ -1061,6 +1115,8 @@ function getGamePoster(name) {
     wheel: wheelPoster,
     snakes: snakesPoster,
     rps: rpsPoster,
+    slide: slidePoster,
+    hilo: hiloPoster,
     fallback: fallbackPoster,
   };
 

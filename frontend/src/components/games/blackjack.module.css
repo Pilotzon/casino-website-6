@@ -8,6 +8,30 @@
 .container {
   --lose-red: #E9103C;
 
+  /* A natural 21 wears its own GOLD state — distinct from the win green
+     (--accent-green), the push orange (#ff9d00) and the loss red. */
+  --blackjack-gold: #FFD700;
+
+  /* ---- Card geometry: the ONE source of truth ----
+     Blackjack.jsx reads these same custom properties (--bj-card-w/h,
+     --bj-overlap-x/y) with getComputedStyle to seat the cards of a hand
+     (centred as a group — see handLayout), to aim the deal flight from the
+     deck and to position the total label on the hand, so nothing can ever
+     drift apart at any responsive size. Only the numbers change per
+     breakpoint. */
+  --bj-card-w: 114px;
+  --bj-card-h: 186px;
+  --bj-overlap-x: 39px;
+  /* fan cascade step, x (card i sits at group-left + i * this) */
+  --bj-overlap-y: 15px;
+  /* fan cascade step, y (card i sits at group-top + i * this) */
+  --bj-rank-size: 38px;
+  --bj-suit-size: 66px;
+  /* One deal flight (= DEAL_FLIGHT_MS in Blackjack.jsx): the hand re-centres
+     itself over exactly that time, so the cards already on the table and the
+     total label arrive at their new seats together with the incoming card. */
+  --bj-shift: 400ms;
+
   --pill-bg: rgba(0, 0, 0, 0.35);
   --pill-text: rgba(255, 255, 255, 0.95);
 
@@ -176,6 +200,7 @@
 /* Areas */
 .dealerArea {
   position: absolute;
+  z-index: 2; /* cards always cover the pays sign */
   top: 70px;
   left: 50%;
   transform: translateX(-50%);
@@ -188,11 +213,14 @@
   left: 0;
   top: 18px;
   width: 100%;
-  height: 181px;
+  /* derived from the card height (it only positions the card: slot top = 0)
+     so the dealer's cards keep their exact top edge at every size */
+  height: calc(var(--bj-card-h) - 5px);
 }
 
 .playerArea {
   position: absolute;
+  z-index: 2; /* cards always cover the pays sign */
   bottom: 26px;
   left: 50%;
   transform: translateX(-50%);
@@ -211,7 +239,8 @@
 
 .handWrap {
   width: clamp(260px, 72vw, 320px);
-  height: 212px;
+  /* card height + the total pill's headroom (see .totalPillPlayer) */
+  height: calc(var(--bj-card-h) + 26px);
   position: relative;
   border-radius: 12px;
   padding: 6px;
@@ -222,16 +251,27 @@
   left: 0;
   bottom: 0;
   width: 100%;
-  height: 191px;
+  /* bottom-anchored and derived from the card height, so a smaller card
+     still sits on exactly the same baseline */
+  height: calc(var(--bj-card-h) + 5px);
 }
 
 /* Totals pills */
 .totalPillDark,
 .totalPillPlayer {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  top: -30px;
+  /* Blackjack.jsx positions the label from the hand's own layout: its right
+     edge on the LAST card's right edge. The player pill hangs its BOTTOM edge
+     on the FIRST card's top edge (cards directly beneath it, no gap); the
+     dealer pill is TOP-anchored instead — the band above it is one half of
+     the table's symmetry rule (it always equals the band below the player's
+     last card). Offsets are inline; these are pre-measurement fallbacks. The
+     transitions keep the label in step with the cards' own glide. */
+  right: 0;
+  bottom: 100%;
+  transition:
+    right var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1),
+    bottom var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1);
   height: 24px;
   min-width: 44px;
   padding: 0 12px;
@@ -245,6 +285,18 @@
   background: #364E5C;
   color: #fff;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
+/* The dealer pill is TOP-anchored: its inline `top` is the table's shared
+   outer gap (the band above it always equals the band below the player's
+   last card — see tableVerticalGap in Blackjack.jsx), and its bottom edge
+   lands exactly on the first card's top edge (no gap). */
+.totalPillDark {
+  top: 0;
+  bottom: auto;
+  transition:
+    right var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1),
+    top var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1);
 }
 
 /* Settled totals take the SAME colour as the cards' outcome outline —
@@ -264,6 +316,13 @@
   color: #3a2200;
 }
 
+/* Natural 21 — the pill takes the same gold as the cards' blackjack
+   outline (the settled pill always mirrors its cards' state). */
+.totalBlackjack {
+  background: var(--blackjack-gold);
+  color: #2b1f00;
+}
+
 /* Ribbon SVG */
 .ribbon {
   position: absolute;
@@ -273,6 +332,9 @@
   width: min(460px, 86%);
   opacity: 0.65;
   pointer-events: none;
+  /* the "Blackjack pays 3:2" sign is table ART: the lowest gameplay layer —
+     dealer cards, player cards, the deck and the popup all stack above it */
+  z-index: 1;
 }
 
 .ribbonSvg {
@@ -282,14 +344,21 @@
   filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.25));
 }
 
-/* Cards (Board) */
+/* Cards (Board) — every size comes from the --bj-card-* / --bj-overlap-*
+   geometry tokens above (phones shrink them) */
 .cardSlot {
   position: absolute;
   left: 0;
   top: 0;
-  width: 114px;
-  height: 186px;
+  width: var(--bj-card-w);
+  height: var(--bj-card-h);
   transform-origin: 20px 163px;
+  /* A hand is a centred GROUP the moment a new card starts flying: the cards
+     already on the table glide half a cascade step LEFT and UP (the layout
+     count steps up at the new card's flight start — see handLayout /
+     planHandLayouts in Blackjack.jsx) in exactly one flight's time, ease
+     matching the dealIn flight. */
+  transition: transform var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1);
 }
 
 .cardMotion {
@@ -301,8 +370,8 @@
 }
 
 .card {
-  width: 114px;
-  height: 186px;
+  width: var(--bj-card-w);
+  height: var(--bj-card-h);
   border-radius: 10px;
   background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.10);
@@ -336,6 +405,14 @@
     0 0 0 3px #ff9d00;
 }
 
+/* Blackjack (a natural 21): its own gold outline — NOT the win green, the
+   push orange or the loss red. */
+.cardOutlineBlackjack {
+  box-shadow:
+    0 14px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 3px var(--blackjack-gold);
+}
+
 /* Front card */
 .corner {
   position: absolute;
@@ -348,7 +425,7 @@
 
 .rank {
   font-weight: 900;
-  font-size: 38px;
+  font-size: var(--bj-rank-size);
   line-height: 1;
 }
 
@@ -361,8 +438,8 @@
 }
 
 .centerSuitIconLarge {
-  width: 66px;
-  height: 66px;
+  width: var(--bj-suit-size);
+  height: var(--bj-suit-size);
   display: block;
   user-select: none;
   -webkit-user-drag: none;
@@ -415,15 +492,16 @@
    comes from --deal-from-x/--deal-from-y (measured per card from the real
    deck position — see dealFromVars() in Blackjack.jsx); the fallback is
    only for the very first paint before measurement lands. The flip to
-   face-up is a SEPARATE step that only starts once this flight completes,
-   and the next card's flight starts 100ms after this one arrives (flight
-   400ms, step 500ms) — the handoff never waits for the flip. The easing is
+   face-up is a SEPARATE step that starts the instant this flight completes,
+   and the NEXT card starts moving on that very frame (flight 400ms, step
+   400ms — DEAL_STEP_MS = DEAL_FLIGHT_MS) — the handoff chains on the flip's
+   first frame, never partway through it and never after it. The easing is
    deliberately mild (not a deep ease-out) so the flight reads quick and
    even all the way into the seat. */
 @keyframes dealIn {
   0% {
     opacity: 0;
-    transform: translate(var(--deal-from-x, 230px), var(--deal-from-y, -270px));
+    transform: translate(var(--deal-from-x, 320px), var(--deal-from-y, -120px));
   }
 
   12% {
@@ -477,8 +555,10 @@
   animation: totalOut 300ms ease-out both;
 }
 
-/* Post-flight flip: back face -> front face, starting only after the
-   card's own flight ends (delay = stagger + full deal duration). */
+/* Post-flight flip: back face -> front face, starting the instant the card's
+   own flight ends (delay = that flight's start + one full flight). The NEXT
+   card's flight starts on that same frame — the deal chains on this flip
+   (see DEAL_STEP_MS in Blackjack.jsx). */
 .dealFlipDo {
   animation: dealFlipIn 420ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
   animation-delay: var(--deal-flip-delay, 540ms);
@@ -541,6 +621,7 @@
 .resultPopup {
   composes: ui-win-popup from global;
   padding: 16px 22px;
+  z-index: 5;
 }
 
 .resultPopupTitle {
@@ -581,7 +662,8 @@
   }
 
   .gameStage {
-    min-height: 560px;
+    /* phones get a slightly taller table than the desktop default */
+    min-height: 620px;
   }
 }
 
@@ -606,6 +688,18 @@
 }
 
 @media (max-width: 600px) {
+
+  /* Phones: the cards step down a size (with their cascade, rank and suit
+     scaled to match) — the geometry tokens are read by Blackjack.jsx, so the
+     fan seats and the deck-origin flight follow automatically. */
+  .container {
+    --bj-card-w: 100px;
+    --bj-card-h: 163px;
+    --bj-overlap-x: 34px;
+    --bj-overlap-y: 13px;
+    --bj-rank-size: 33px;
+    --bj-suit-size: 58px;
+  }
 
   /* Result popup stays a true dead-centre overlay on mobile too */
   .resultPopup {
@@ -638,24 +732,15 @@
 }
 
 @media (max-width: 420px) {
-  .cardSlot {
-    width: 96px;
-    height: 157px;
-  }
-
-  .card {
-    width: 96px;
-    height: 157px;
-    border-radius: 10px;
-  }
-
-  .rank {
-    font-size: 28px;
-  }
-
-  .centerSuitIconLarge {
-    width: 50px;
-    height: 50px;
+  /* small phones: one step smaller again — every card part follows the same
+     tokens, so nothing drifts */
+  .container {
+    --bj-card-w: 88px;
+    --bj-card-h: 144px;
+    --bj-overlap-x: 30px;
+    --bj-overlap-y: 11px;
+    --bj-rank-size: 29px;
+    --bj-suit-size: 51px;
   }
 
   .playerArea {

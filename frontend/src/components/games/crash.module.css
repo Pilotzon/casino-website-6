@@ -123,11 +123,16 @@
   gap: 6px;
   width: 100%;
   min-width: 0;
-  /* fade the OLD end (left) instead of the new end (right) */
-  mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 100%);
+  /* no gradient mask: the OUTGOING pill fades itself (usePillFadeOut) */
   /* arrival slide (global keyframes) — same one-motion row glide as Limbo */
   animation: ui-pills-slide 320ms cubic-bezier(0.22, 0.9, 0.3, 1);
+}
+/* Same opt-out as the shared rule (global.css): the row slide is motion,
+   so a reduced-motion user gets the pills with no travel. */
+@media (prefers-reduced-motion: reduce) {
+  .historyPills {
+    animation: none;
+  }
 }
 .histPill { direction: ltr; }
 .histPill {
@@ -142,7 +147,18 @@
   font-size: var(--font-size-control);
   font-weight: 800;
   letter-spacing: 0.2px;
+  /* digits keep their own width, so a "9.99×" pill is exactly as wide as
+     the hook measures it when it arms the slide (shared rule) */
+  font-variant-numeric: tabular-nums;
   /* no per-pill motion — arrival is the row's single leftward slide */
+}
+
+/* Same opt-out as the shared rule (global.css): the row slide is motion,
+   so a reduced-motion user gets the pills with no travel. */
+@media (prefers-reduced-motion: reduce) {
+  .historyPills {
+    animation: none;
+  }
 }
 .histGreen {
   background: var(--accent-green);

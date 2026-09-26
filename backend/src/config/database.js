@@ -378,6 +378,11 @@ function initializeGames() {
     { name: "wheel", display_name: "Wheel", config: JSON.stringify({ house_edge: 0.03 }) },
     { name: "snakes", display_name: "Snakes", config: JSON.stringify({ house_edge: 0.03 }) },
     { name: "rps", display_name: "Rock Paper Scissors", config: JSON.stringify({ house_edge: 0.02 }) },
+    // Scaffolding: both exist as games (lobby, their own page, admin switch,
+    // stats rows) but nothing plays them yet — their betting routes answer
+    // 501 with a clear message instead of pretending to run a round.
+    { name: "slide", display_name: "Slide", config: JSON.stringify({ house_edge: 0.02, coming_soon: true }) },
+    { name: "hilo", display_name: "Hilo", config: JSON.stringify({ house_edge: 0.02, coming_soon: true }) },
   ];
 
   const insertGame = db.prepare(`

@@ -39,7 +39,7 @@ Crash is a **solo** game (no multiplayer feed) and the backend owns every rule:
   (`retryInMs` is returned with a 429).
 * `npm run test:crash` (in `backend/`) runs the 79-check engine smoke test
   against a throw-away database; `npm run test:http` boots the real server on a
-  spare port and drives the same endpoints over HTTP (33 checks, also against a
+  spare port and drives the same endpoints over HTTP (39 checks, also against a
   throw-away database — including `GET /api/dashboard/today`);
   `npm run test:keno` checks the Keno payout tables (147 checks). `npm test`
   runs all three.
@@ -51,6 +51,15 @@ kinds: `success`, `error`, `info`, `warning` and **`loss`**. A lost round is an
 outcome, not a failure — `toast.loss("You lost 20.00 $ this round")` renders the
 "Loss" title with a falling-chart icon instead of the red "Error" cross
 (`toast.error` stays for real failures: rejected bets, network problems, …).
+
+Toasts **stack**: a new one appears at the top right and the ones already on
+screen are pushed down by its height + the 10 px gutter (they slide, they are
+never replaced or piled on top of each other). `react-hot-toast` positions each
+toast with an absolutely positioned wrapper and *measures that wrapper* to
+compute every offset — so the card itself has to stay **in flow** inside it
+(`toast.css`: `position: relative`). An absolutely positioned card is out of
+flow, reports a height of 0, and every toast then lands on exactly the same
+spot.
 
 ### Disabled betting
 
@@ -83,15 +92,21 @@ column headers, each row becomes a two-line card (name/key, then status + the
 action buttons) and the row buttons turn **icon-only** — 44 × 44 tiles with
 24 px icons, so the power / phone glyphs stay readable — while keeping their
 `aria-label` and `title`, so the meaning survives the missing text.
-* `npm run test:board` (in `frontend/`) runs the 96-check DOM test of the Crash
+* `npm run test:board` (in `frontend/`) runs the 104-check DOM test of the Crash
   board in jsdom (see `frontend/tests/crash-board/`) — it drives the real
   component (polling, cash-out, render pump) against a scripted server and
-  measures what the board actually renders.
-* `npm run test:ui` (in `frontend/`) runs the 248-check site UI suite
-  (`frontend/tests/site-ui/`): the toast kinds, the games-page filter row, the
-  admin panel's phone layout, the bet-button hazard badge on **every** game, the
-  Scroll-up pill, the bypass permission in the UI, the filled icon set, the
-  currency mark, the mobile bottom bar and the balance box with its Today panel.
+  measures what the board actually renders, including the history pills' slide.
+* `npm run test:ui` (in `frontend/`) runs the 418-check site UI suite
+  (`frontend/tests/site-ui/`): the toast kinds (and that they stack), the
+  games-page filter row, the admin panel's phone layout, the bet-button hazard
+  badge on **every** game, the Scroll-up pill, the bypass permission in the UI,
+  the filled icon set, the currency mark, the mobile bottom bar and the balance
+  box with its Today panel, the dealt-blackjack reveal + bet-button gate, the
+  Dice/Limbo history overlay, the Blackjack deal chain / centred hand /
+  travelling total label (appearing with the FIRST card, at the one-card
+  position) with the symmetric table bands and the flattened deal diagonal,
+  the universal pills row (marker in-row, self-fading exit), the Roulette
+  history stack, and the Slide/Hilo scaffolding shells.
 * `npm test` runs both frontend suites.
 
 ### Scroll up
@@ -191,6 +206,145 @@ back-to-top button of their own.
   "Refreshing the page will not save" prompt (plus a `beforeunload` fallback for
   the browser's own reload button). Every game reports its own live bet through
   `useActiveBetFlag(key, active)`.
+
+### History pills + the marker
+
+Every game with pills (Crash, Dice, Limbo, Wheel) renders the same system: the
+newest pill sits at the right edge, older rounds continue left, green = won,
+grey = lost, followed by the My-bets icon and `‹ You`.
+
+* **Arrival** is ONE motion for the whole row: the new pill starts off-view on
+  the right and glides in with the older pills shifting left at the same time.
+  `hooks/usePillSlide.js` measures the new pill and arms `--pill-slide-from`,
+  the shared `ui-pills-slide` keyframes walk the row back to 0, and the
+  container is remounted per arrival so it replays. The trigger is the newest
+  pill's **identity**, never the row length — histories are capped, so a length
+  key would silently stop sliding once the cap is reached.
+* **The marker sits IN the pills row in EVERY pills game** (pills left,
+  marker right) — Crash, Dice, Limbo and Wheel alike. Dice and Limbo float
+  that row over the stage as an **overlay**: it is absolutely pinned to the
+  stage's top strip and the stage reserves that strip with its own padding, so
+  neither the pills nor the marker can ever push the game layout downward.
+* **The gap between pills is one constant** (`gap: 6px`): it never compresses
+  or stretches with a pill's own width, and no pill carries a margin.
+* **No gradient mask.** The old static left-edge fade (Crash) is gone; the
+  OUTGOING pill fades ITSELF — `hooks/usePillFadeOut.js` steps each pill's own
+  opacity down as its right edge approaches the scroller's left boundary and
+  to zero exactly when it leaves, tracking the arrival slide frame by frame.
+* **Roulette's history stack is dynamic**: it is exactly as tall as the balls
+  it currently holds (no reserved full-height column), and the "History"
+  title is centred in the panel with a slightly tighter top padding.
+
+### Blackjack (frontend)
+
+The round is server-authoritative (`processBlackjack` / `blackjackAction` in
+`services/gameEngine.js`); the board only replays what it is told, in order.
+
+* **A natural 21 wears its own state.** A settled hand of exactly two cards
+  worth 21 takes a gold outline (`--blackjack-gold`) and the matching total-pill
+  tone (`cardOutlineBlackjack` / `totalBlackjack`) — deliberately different from
+  the win green, the push orange and the loss red.
+* **A blackjack dealt on the initial deal reveals its hole card in the deal.**
+  The server ends the round on the spot and returns both dealer cards face-up;
+  the board still deals the hole card FACE DOWN like any other second card,
+  turns it over the moment it lands, and only after that flip finishes are the
+  settled colours/outlines applied, the dealer's total stepped and the win/loss
+  sound played — never before, never during.
+* **Nothing reacts before the flips are done.** The reveal (win popup, settled
+  outlines, pill tones, the win/lose sound) waits for the last of the player's
+  cards to finish flipping *and* for the hole-card flip, plus a two-frame grace
+  (40 ms) so the styling can never land on the animation's last frame.
+* **The Bet button re-arms when the round is over for the eye, not when the
+  JSON lands.** After Stand (or any settle) it stays disabled while the dealer
+  is still drawing and flipping and comes back only once the reveal has fired;
+  betting mid-draw used to wipe a round that was still being played out.
+* **The deal is one card at a time, chained on the flip.** A card flies for
+  `DEAL_FLIGHT_MS` (400 ms) and then deal-flips for `DEAL_FLIP_MS` (420 ms);
+  the NEXT card starts moving on the very frame that flip begins
+  (`DEAL_STEP_MS = DEAL_FLIGHT_MS`), so a card's flip always runs while the
+  next card is already on its way — never partway through the flip, never
+  after it. The opening deal is therefore P0 [0,400] → D0 [400,800] →
+  P1 [800,1200] → D1 [1200,1600], each starting exactly when the previous
+  card's flip starts.
+* **A hand is a centred group.** `handLayout()` in `Blackjack.jsx` seats card
+  i at `(x0 + i·overlapX, y0 + i·overlapY)` with the group centred in its fan
+  on BOTH axes, so a hand of n cards sits dead centre whatever n is. When a
+  card is added the hand's layout count steps up at that card's flight start:
+  the cards already on the table glide half a cascade step **left and up**
+  (`.cardSlot` transitions the transform over `--bj-shift` = one flight) while
+  the new card travels to the seat that completes the group, and the two
+  arrive together. The card on its way is already seated where it will land,
+  so the step never moves it.
+* **The total label tracks the hand.** It is anchored by its own right and
+  bottom edges to the layout: right edge on the LAST (most recently added)
+  card's right edge, bottom edge on the FIRST card's top edge — the cards sit
+  directly beneath it, no gap. Because both offsets come from the same layout
+  and transition over the same one-flight duration, the label travels with the
+  hand (up and to the right as it grows) instead of being centred over it.
+* **The total label appears with the FIRST card.** It counts cards the moment
+  they LAND (never waiting for the flip): on the opening deal the pill is up
+  as soon as card #1 finishes its flight, showing the single-card total while
+  standing at the ONE-card alignment (right edge on that card, bottom edge on
+  its top edge) — not pre-positioned at the two-card layout. When card #2
+  starts flying, the label glides with the hand's re-centring glide into the
+  two-card layout and counts the second card the instant it lands; it updates
+  live on every later card the same way. The dealer's pill follows the same
+  rule, except its face-down hole card only joins the total when the reveal
+  turns it over. After a split, each new hand carries its card as already
+  counted and counts its fresh card on landing. In other words the label
+  updates the instant a card's MOVEMENT finishes arriving — never after its
+  flip.
+* **The table's vertical bands are symmetric, always.** The gap below the
+  player's rightmost card and the gap above the dealer's total label are ONE
+  shared number in every state and hand configuration (`tableVerticalGap` in
+  `Blackjack.jsx`): each side's centred gap is computed, the tightest one
+  (never below a small minimum) is applied to both outer edges, so the dealer
+  block hangs top-banded and every player hand bottom-banded. The dealer pill
+  is therefore TOP-anchored (its inline `top` is the shared band; its bottom
+  edge still lands exactly on the first card's top), while the player pill
+  keeps its bottom anchor.
+* **The deal flies in on a flattened diagonal.** The deck-to-seat vector is
+  scaled by `DEAL_FLATTEN_X = 1.4` / `DEAL_FLATTEN_Y = 0.45` — less than half
+  the vertical drop, 40% more horizontal run — so each card reads as a mostly
+  horizontal slide with a slight vertical component instead of the old steep
+  dive.
+* **The "Blackjack pays 3:2, Insurance pays 2:1" sign is table art, not a
+  gameplay layer.** It carries the lowest z-index of the table (`z-index: 1`)
+  while the dealer and player areas stack above it (`z-index: 2`, deck 10,
+  popup 5) — cards never render underneath it.
+* **Phones get a slightly taller table** (`min-height: 620px` on the stage at
+  ≤900px).
+* **Card geometry has one source of truth.** `blackjack.module.css` declares
+  `--bj-card-w/h`, `--bj-overlap-x/y`, `--bj-rank-size`, `--bj-suit-size` and
+  `--bj-shift`; `Blackjack.jsx` reads them with `getComputedStyle` for the fan
+  seats, the deck-origin flight vectors and the label's anchors. Phones step
+  the whole set down a size (≤600 px, then ≤420 px) — cards, cascade, rank and
+  suit together.
+
+### Slide & Hilo (scaffolding shells)
+
+Both new games are registered end to end but are **not playable yet** —
+pure scaffolding, so they exist in the lobby and on their own pages while the
+real boards are built:
+
+* **Backend:** the seed in `config/database.js` adds `slide` and `hilo` to the
+  `games` table, so `GET /api/games` lists them, their pages open and the admin
+  panel switches them like any other game. `POST /api/games/slide/play` and
+  `/hilo/play` are registered behind the usual auth / maintenance middleware
+  but always answer **501** — no engine, no RNG, no bet resolution, nothing
+  touching a balance.
+* **Frontend:** `components/games/Slide.jsx` and `Hilo.jsx` render the
+  standard shell — the shared sidebar betting panel (bet amount with ½ / 2×,
+  the Bet button on `.ui-bet-wrap`, the read-only profit readout, the
+  lock badge when disabled) plus an info stage carrying the game's
+  description and a "coming soon" notice. A valid Bet runs the standard
+  validation and stops at that notice — it never calls the API, never moves
+  the balance, never starts a round. Both games are wired into the games-page
+  router / poster map / info copy, the home page and the side rail, with
+  their own generated posters.
+* `npm run test:http` asserts the registration and the 501 contract over real
+  HTTP; the site-ui suite's §11 asserts the shells (standard panel, lock-down,
+  truthful stage, no fake round).
 
 ## Database persistence — how it works
 

@@ -110,10 +110,17 @@
   background: var(--color-bg-game);
   /* game grid panel — exact Casino value */
   padding: var(--stage-pad); /* equal on all four sides (global rule) */
+  /* Fixed strip reserved for the history overlay (pills row + marker):
+     the overlay itself is absolute, the strip is padding — so nothing
+     inside the row can ever move the game layout. Re-tuned per breakpoint
+     (see the ≤900px / ≤600px blocks) because the pills grow there. */
+  --history-strip: 46px;
+  padding-top: calc(var(--stage-pad) + var(--history-strip));
   justify-content: flex-start;
   /* top-anchored: pills first, the slider centres itself underneath */
   align-items: center;
   position: relative;
+  min-height: 0;
 }
 
 /* (rest of your Dice CSS unchanged below) */
@@ -448,15 +455,38 @@
   composes: ui-win-popup-divider from global;
 }
 
-/* History pills (the Crash system, shared) — pinned to the TOP of the
-   stage; the auto bottom margin absorbs the free space so the slider
-   stays centred in what is left. */
+/* History pills + marker — ONE overlay row pinned to the TOP of the stage.
+   Pills on the left (newest pill at the right edge), the My-bets / "‹ You"
+   marker on the right: Crash's layout. The row is ABSOLUTE, so it floats
+   over the stage's reserved top strip instead of joining the column flow —
+   no pill arriving, no marker, no content change can push the game layout
+   downward. The stage reserves the strip with its own top padding. */
 .historyRow {
   composes: ui-history-row from global;
 }
 
+/* Scoped (doubled selector) so these win over the shared `ui-history-row`
+   values whatever order the stylesheets load in — same trick as the
+   stats panel below. */
+.container .historyRow {
+  position: absolute;
+  top: var(--stage-pad);
+  left: var(--stage-pad);
+  right: var(--stage-pad);
+  width: auto;
+  max-width: none;
+  margin-bottom: 0;
+  z-index: 9; /* over the board, under the win popup (dead-centre) */
+}
+
 .historyMeta {
   composes: ui-history-meta from global;
+}
+
+/* The marker sits INSIDE the pills row now: its own bottom margin would
+   add phantom height to the overlay (it was a stacked line before). */
+.container .historyMeta {
+  margin-bottom: 0;
 }
 
 .historyIcon {
@@ -596,6 +626,10 @@
 
   .gameStage {
     padding: var(--stage-pad); /* equal on all four sides (global rule) */
+    /* phones scroll the pills, so the strip grows with the taller pills +
+       the thin scrollbar (see .historyScroll below) */
+    --history-strip: 54px;
+    padding-top: calc(var(--stage-pad) + var(--history-strip));
   }
 
   /* Panel leaves the overlay and flows under the track, still 16px from
@@ -630,17 +664,17 @@
 
   .gameStage {
     padding: var(--stage-pad); /* equal on all four sides (global rule) */
+    --history-strip: 54px; /* taller pills + the scroller's thin scrollbar */
+    padding-top: calc(var(--stage-pad) + var(--history-strip));
     justify-content: flex-start;
   }
 
-  /* the stage is top-aligned on small screens — no auto margin needed */
-  .historyRow {
-    margin-bottom: 10px;
-  }
-
+  /* The history row stays an overlay here — the stage's reserved strip is
+     what keeps the slider clear of it (never a margin on the row, which
+     would re-enter the flow on this breakpoint). */
   .sliderWrapper {
     max-width: 100%;
-    margin: 10px auto 16px auto;
+    margin: 0 auto 16px auto;
   }
 
   .scaleLabels {

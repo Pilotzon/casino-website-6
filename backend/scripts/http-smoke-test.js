@@ -91,10 +91,12 @@ async function req(method, url, { body, token, headers } = {}) {
     const list = games.json?.data || games.json?.games || [];
     ok(games.status === 200 && Array.isArray(list), "GET /api/games → 200 + list",
       `${games.status} ${JSON.stringify(games.json)?.slice(0, 200)}`);
-    ok(list.length >= 14, "all 14 games are served", String(list.length));
+    ok(list.length >= 16, "every registered game is served (14 games + the 2 scaffolding shells)",
+      String(list.length));
     const crash = list.find((g) => (g.name || "").toLowerCase() === "crash");
     ok(!!crash && "is_enabled" in crash, "the payload carries crash + its is_enabled flag (drives the badge)",
       JSON.stringify(crash));
+
 
     const pages = await req("GET", "/api/pages");
     ok(pages.status === 200, "GET /api/pages → 200", String(pages.status));
@@ -115,8 +117,24 @@ async function req(method, url, { body, token, headers } = {}) {
 
     const admin = await req("GET", "/api/admin/games", { token });
     const adminRows = admin.json?.data || [];
-    ok(admin.status === 200 && adminRows.length >= 14, "admin game list needs the owner token",
+    ok(admin.status === 200 && adminRows.length >= 16, "admin game list needs the owner token",
       `${admin.status} ${JSON.stringify(admin.json)?.slice(0, 160)}`);
+
+    /* Slide / Hilo are REGISTERED but not playable: they are listed (and open
+       their own page), and their betting route answers 501 instead of running
+       anything — no engine, no balance moved. */
+    for (const name of ["slide", "hilo"]) {
+      const row = list.find((g) => (g.name || "").toLowerCase() === name);
+      ok(!!row && "is_enabled" in row, `${name} is registered and listed like every other game`,
+        JSON.stringify(row));
+      const one = await req("GET", `/api/games/${name}`);
+      ok(one.status === 200 && (one.json?.data?.name || "") === name,
+        `GET /api/games/${name} opens its own page`, `${one.status}`);
+      const play = await req("POST", `/api/games/${name}/play`, { token, body: { betAmount: 1 } });
+      ok(play.status === 501 && play.json?.success === false,
+        `POST /api/games/${name}/play is a clear 501 (scaffolding, not a fake round)`,
+        `${play.status} ${JSON.stringify(play.json)?.slice(0, 120)}`);
+    }
     const noAuth = await req("GET", "/api/admin/games");
     ok(noAuth.status === 401 || noAuth.status === 403, "admin game list rejects anonymous callers", String(noAuth.status));
 

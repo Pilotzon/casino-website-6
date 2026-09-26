@@ -40,6 +40,8 @@ import russianRoulettePoster from "../assets/game-posters/RussianRoulette.png";
 import wheelPoster from "../assets/game-posters/wheel.png";
 import snakesPoster from "../assets/game-posters/snakes.png";
 import rpsPoster from "../assets/game-posters/rps.png";
+import slidePoster from "../assets/game-posters/slide.png";
+import hiloPoster from "../assets/game-posters/hilo.png";
 import fallbackPoster from "../assets/game-posters/fallback.png";
 
 function getGamePoster(name) {
@@ -58,6 +60,8 @@ function getGamePoster(name) {
     wheel: wheelPoster,
     snakes: snakesPoster,
     rps: rpsPoster,
+    slide: slidePoster,
+    hilo: hiloPoster,
     fallback: fallbackPoster,
   };
   return posters[name] || fallbackPoster;

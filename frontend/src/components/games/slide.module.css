@@ -1,0 +1,209 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@500;600;700;800&display=swap');
+
+/* =========================================================
+   Slide shell theme (scoped to this game only)
+   Shared sidebar control tokens/classes live in
+   styles/global.css — do not redefine them here.
+   ========================================================= */
+.container {}
+
+.container {
+  composes: game-shell from global;
+  display: flex;
+  background: var(--color-bg-game);
+  /* game grid panel — exact Casino value */
+  color: var(--color-text-primary);
+  font-family: 'proxima-nova';
+  font-feature-settings: "salt" on;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: var(--layout-sidebar-width);
+  background: var(--color-bg-panel);
+  /* sidebar panel */
+  padding: var(--sidebar-padding);
+  /* 15px top/left/right, 16px bottom — shared token */
+  display: flex;
+  flex-direction: column;
+  gap: var(--sidebar-group-gap); /* group rhythm (global) */
+  border-right: 1px solid var(--color-divider-panel);
+  /* sidebar/game divider #253241 */
+}
+
+/* =========================================================
+   Sidebar controls — shared styling lives in styles/global.css
+   (composed here so this game matches every other one)
+   ========================================================= */
+.modeToggle {
+  composes: sidebar-mode-toggle from global;
+}
+
+.modeBtn {
+  composes: sidebar-mode-btn from global;
+}
+
+.active {
+  composes: sidebar-mode-active from global;
+}
+
+.controlGroup {
+  composes: sidebar-control-group from global;
+}
+
+.labelRow {
+  composes: sidebar-label-row from global;
+}
+
+.inputGroup {
+  composes: sidebar-input-group from global;
+}
+
+.inputWrapper {
+  composes: sidebar-input-wrapper from global;
+}
+
+.btcIcon {
+  composes: sidebar-currency-icon from global;
+}
+
+.splitButtons {
+  composes: sidebar-split-buttons from global;
+}
+
+.divider {
+  composes: sidebar-divider from global;
+}
+
+.betButton {
+  composes: sidebar-bet-button from global;
+}
+
+.readonlyInput {
+  composes: sidebar-readonly-input from global;
+}
+
+/* ===== Stage (placeholder — the real board replaces this) ===== */
+.gameStage {
+  flex: 1;
+  background: var(--color-bg-game);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: var(--stage-pad);
+}
+
+.placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 520px;
+  gap: 14px;
+}
+
+/* The one piece of the artwork that already says what the game is: a puck
+   sliding down a steep track. */
+.placeholderTrack {
+  position: relative;
+  width: min(420px, 84%);
+  height: 10px;
+  margin-bottom: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.32));
+  transform: rotate(-14deg);
+}
+
+.trackPuck {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  margin-top: -27px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.35);
+  animation: slidePuck 2200ms cubic-bezier(0.3, 0.7, 0.4, 1) infinite;
+}
+
+@keyframes slidePuck {
+  0% { right: 6px; opacity: 1; }
+  60% { right: calc(100% - 60px); opacity: 1; }
+  100% { right: calc(100% - 60px); opacity: 0; }
+}
+
+.placeholderTitle {
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 0.4px;
+}
+
+.placeholderText {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--color-text-secondary);
+}
+
+.placeholderTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.softPill {
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.comingSoon {
+  margin-top: 4px;
+  padding: 10px 18px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trackPuck {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .container {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom-right-radius: 0px;
+  }
+}
+
+@media (max-width: 600px) {
+  .gameStage {
+    min-height: 420px;
+  }
+
+  .placeholderTitle {
+    font-size: 32px;
+  }
+
+  .placeholderText {
+    font-size: 16px;
+  }
+}

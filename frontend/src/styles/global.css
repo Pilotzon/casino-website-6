@@ -1239,7 +1239,9 @@ textarea::placeholder {
   flex: 0 0 auto;
   /* the pill row always spans the stage's full content width (the stage's
      own max-width minus padding) — the newest pill reaches the right edge
-     in every game; nothing may sit beside the pills inside this row */
+     in every game. EVERY pills game puts the marker IN this row (pills
+     left, marker right) — the universal rule; Dice and Limbo float the
+     whole pair over the stage as an overlay. */
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -1247,10 +1249,9 @@ textarea::placeholder {
      (Crash parity — its local row uses the same 6px) */
   margin-bottom: 6px;
 }
-/* History marker row (Crash is the source of truth — every game with
-   pills renders this identical line under its pills): the My-bets icon +
-   "‹ You", right-aligned on their own line so the pills row above keeps
-   the stage's full width. */
+/* History marker (Crash is the source of truth — every game with pills
+   renders this identical pair): the My-bets icon + "‹ You". It sits INSIDE
+   the pills row in every game — pills left, marker right. */
 .ui-history-meta {
   display: flex;
   align-items: center;
@@ -1293,9 +1294,8 @@ textarea::placeholder {
   gap: 6px;
   width: 100%;
   min-width: 0;
-  /* fade the OLD end (left) instead of the new end (right) */
-  mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 100%);
-  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 100%);
+  /* no gradient mask anywhere: the OUTGOING pill fades itself as it leaves
+     the scroller (usePillFadeOut), the rest stay fully opaque */
   /* new-pill arrival: the whole row (new pill included) starts shifted
      right by the new pill's width — off-view, clipped by the scroll
      wrapper — and glides left into place as one motion (see

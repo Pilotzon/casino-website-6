@@ -13,7 +13,16 @@
   height: 80px;
   border-radius: 8px;
   overflow: hidden;
-  position: absolute;
+  /* IN FLOW inside react-hot-toast's own wrapper — never `position:
+     absolute`. The library positions each toast with an absolutely
+     positioned, flex wrapper and measures THAT wrapper's height to work out
+     every other toast's offset; an absolute card is out of flow, reports
+     height 0, and every toast then lands on top of the previous one
+     (overlap / "replaced" instead of a stack). In flow, a new toast reports
+     its real height, so the older ones are pushed DOWN by height + gutter
+     (the wrapper animates the move). `relative` still anchors the accent
+     panel, the close button and the progress bar. */
+  position: relative;
   background: #213743;
   box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
   font-family: Inter;

@@ -6,6 +6,7 @@ import { gamesAPI } from '../../services/api';
 import Stepper from "../common/Stepper";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import usePillSlide from "../../hooks/usePillSlide";
+import usePillFadeOut from "../../hooks/usePillFadeOut";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
 import BetError from "../common/BetError";
@@ -277,6 +278,8 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   const cooldownActiveRef = useRef(false);
   const lastFrameAtRef = useRef(0);                // render-pump watchdog
   const historyScrollRef = useRef(null);           // horizontal pill scroller (mobile)
+  // the outgoing pill fades itself as it leaves the scroller (no gradient mask)
+  usePillFadeOut(historyScrollRef, slideKey);
   const axisRowRef = useRef(null);                 // X axis row (tick clearance)
   const axisClockRef = useRef(null);               // "Total Ns" label in that row
 
@@ -1105,15 +1108,15 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
                   )}
                 </div>
               </div>
-            </div>
-            {/* Own right-aligned line: these controls must never steal width
-                from the pills row above (the newest pill reaches the stage's
-                right edge). */}
+            {/* Same row as the pills — pills left, marker right (the universal
+                rule for every pills game). The scroller's flex:1 keeps the
+                marker clear of the pills, so it never steals their width. */}
             <div className={styles.historyMeta}>
               <button className={styles.historyIcon} type="button" aria-label="My bets">
                 <IconArticle size={18} />
               </button>
               <span className={styles.historyYou}>‹ You</span>
+            </div>
             </div>
 
             {/* Round clock, phone layout only: top right, right under the pills

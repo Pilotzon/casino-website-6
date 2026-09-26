@@ -24,6 +24,8 @@ import russianRoulettePoster from "../assets/game-posters/RussianRoulette.png";
 import wheelPoster from "../assets/game-posters/wheel.png";
 import snakesPoster from "../assets/game-posters/snakes.png";
 import rpsPoster from "../assets/game-posters/rps.png";
+import slidePoster from "../assets/game-posters/slide.png";
+import hiloPoster from "../assets/game-posters/hilo.png";
 import fallbackPoster from "../assets/game-posters/fallback.png";
 
 const GAME_CATALOG = [
@@ -41,6 +43,8 @@ const GAME_CATALOG = [
   { name: "rps", display_name: "Rock Paper Scissors", poster: rpsPoster, subtitle: "Original" },
   { name: "blackjack", display_name: "Blackjack", poster: blackjackPoster, subtitle: "Classic" },
   { name: "russian_roulette", display_name: "Russian Roulette", poster: russianRoulettePoster, subtitle: "Thriller" },
+  { name: "slide", display_name: "Slide", poster: slidePoster, subtitle: "Coming soon" },
+  { name: "hilo", display_name: "Hilo", poster: hiloPoster, subtitle: "Coming soon" },
 ];
 
 function shuffle(arr) {

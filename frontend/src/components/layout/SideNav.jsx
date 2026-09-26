@@ -25,6 +25,7 @@ const GameIcon = <IconDiceFive />;
 const GAME_LINKS = [
   "flip", "dice", "limbo", "plinko", "crash", "mines", "roulette",
   "blackjack", "keno", "tower", "russian_roulette", "wheel", "snakes", "rps",
+  "slide", "hilo",
 ].map((name) => ({
   path: `/games/${name}`,
   label: name === "rps" ? "Rock-Paper-Scissors" : name === "russian_roulette" ? "Russian Roulette" : name.charAt(0).toUpperCase() + name.slice(1),

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import usePillSlide from "../../hooks/usePillSlide";
+import usePillFadeOut from "../../hooks/usePillFadeOut";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
 import BetError from "../common/BetError";
@@ -117,6 +118,8 @@ function Dice({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   const historyScrollRef = useRef(null);
   // Pill row slides in from the right as one motion on every addition
   const { pillsRef, slideKey, slideFrom } = usePillSlide(history[0]?._pillId ?? null);
+  // the outgoing pill fades itself as it leaves the scroller (no gradient mask)
+  usePillFadeOut(historyScrollRef, slideKey);
 
   // Crash parity (mobile scroller): keep the freshest pill in view
   useEffect(() => {
@@ -450,10 +453,15 @@ function Dice({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
           <>
             {/* Dice never shows a win popup, under any outcome. */}
 
-            {/* Always rendered: an invisible placeholder pill reserves the
-            row's space until the first real pill swaps in — the row never
-            grows, so content below never jumps. Newest-first, exactly like
-            Crash (row-reverse puts the first pill at the right). */}
+            {/* History pills + marker, ONE row — Crash's layout: pills on the
+            left (newest pill pinned to the right edge), the My-bets / "‹ You"
+            marker on the right. The row is an OVERLAY pinned to the top of the
+            stage (dice.module.css), so neither the pills nor the marker can
+            ever push the game layout down, whatever their content does.
+            Always rendered: an invisible placeholder pill keeps the row's
+            size final until the first real pill swaps in. Newest-first,
+            exactly like Crash (row-reverse puts the first pill at the
+            right). */}
             <div className={styles.historyRow}>
               <div className={styles.historyScroll} ref={historyScrollRef}>
                 <div
@@ -478,13 +486,14 @@ function Dice({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
                   )}
                 </div>
               </div>
-            </div>
-            {/* Crash's marker row, identical in every pills game */}
-            <div className={styles.historyMeta}>
-              <button className={styles.historyIcon} type="button" aria-label="My bets">
-                <IconArticle size={18} />
-              </button>
-              <span className={styles.historyYou}>‹ You</span>
+
+              {/* Crash's marker, identical in every pills game — same row */}
+              <div className={styles.historyMeta}>
+                <button className={styles.historyIcon} type="button" aria-label="My bets">
+                  <IconArticle size={18} />
+                </button>
+                <span className={styles.historyYou}>‹ You</span>
+              </div>
             </div>
 
             <div className={styles.sliderWrapper}>
