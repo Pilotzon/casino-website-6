@@ -47,7 +47,9 @@ const setInputValue = (input, value) => {
   input.dispatchEvent(new window.Event('input', { bubbles: true }));
 };
 const txt = (root, cls) => root.querySelector(`.css-${cls}`)?.textContent?.trim() ?? null;
-const num = (root, cls) => parseFloat((txt(root, cls) || '').replace(/[^\d.]/g, ''));
+// reads a number out of an element's text; the odometer renders its digits
+// twice (aria-hidden slots + an sr-only copy), so the sr-only copy wins
+const num = (root, cls) => parseFloat(((root.querySelector(`.css-${cls} .css-odSrOnly`)?.textContent) || txt(root, cls) || '').replace(/[^\d.]/g, ''));
 const styleNum = (el, prop) => parseFloat((el?.style?.[prop] || '').replace('%', ''));
 const paths = (root) => [...root.querySelectorAll('svg.css-svg path')];
 const linePath = (root) => paths(root).pop();
@@ -607,6 +609,35 @@ async function main() {
     const from = c11.querySelector('.ui-history-pills')?.style.getPropertyValue('--pill-slide-from') ?? '';
     ok(parseFloat(from) > 0,
       'the row is armed with the new pill\'s width (it starts off-view right)', `--pill-slide-from:${from}`);
+    unmountAll();
+  }
+
+  console.log('\n=== 15. the big multiplier is a fixed-slot odometer (digits never shift) ===');
+  {
+    const css = readFileSync(resolve(here, '../../src/components/games/crash.module.css'), 'utf8');
+    ok(/\.odSlot\s*\{[^}]*width:\s*0\.6em/.test(css),
+      'every digit sits in a fixed 0.6em slot — "1" and "6" render the same width');
+    ok(/\.odDot\s*\{[^}]*width:\s*0\.32em/.test(css),
+      'the decimal dot has its own fixed-width slot');
+    ok(/\.centerMult\s*\{[^}]*letter-spacing:\s*0/.test(css) && /tabular-nums/.test(css),
+      'the label is tabular with zero letter-spacing — no per-glyph drift');
+
+    // live DOM: slot divs for the digits + one sr-only plain copy
+    api.state = liveState({ startedAt: T0, currentMultiplier: 6.5 });
+    const c15 = mountBoard();
+    await sleep(350);
+    const mult = c15.querySelector('.css-centerMult');
+    ok(!!mult, 'the multiplier label renders');
+    const sr = mult?.querySelector('.css-odSrOnly')?.textContent ?? '';
+    ok(/^\d+\.\d{2}×$/.test(sr), 'the sr-only copy is the plain formatted string', sr);
+    const slots = [...(mult?.querySelectorAll('.css-odSlot') ?? [])];
+    ok(slots.length === sr.replace('×', '').replace('.', '').length,
+      'exactly one fixed slot per digit — nothing reflows as widths change',
+      `slots=${slots.length} sr=${sr}`);
+    ok((mult?.querySelectorAll('.css-odDot')?.length ?? 0) === 1,
+      'exactly one decimal-dot slot');
+    ok(!!mult?.querySelector('.css-centerX'), 'the × mark is its own fixed element beside the slots');
+    ok(slots.every((s) => /^\d$/.test(s.textContent)), 'each slot holds one digit', slots.map((s) => s.textContent).join(''));
     unmountAll();
   }
 

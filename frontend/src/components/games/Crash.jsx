@@ -1139,13 +1139,31 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
                 {/* Multiplier + status box UNDER it (only when it says something) */}
                 {showBoard && phase !== 'idle' && (
                   <div className={styles.centerOverlay}>
-                    <div
-                      className={`${styles.centerMult} ${isCrashedView ? styles.centerMultCrashed : ''}`}
-                      style={{ color: multColor }}
-                    >
-                      {fmt(displayedMult)}
+                  <div
+                    className={`${styles.centerMult} ${isCrashedView ? styles.centerMultCrashed : ''}`}
+                    style={{ color: multColor }}
+                  >
+                    {/* Odometer — the same fixed-width slot system as Limbo's
+                        number display: every digit sits in its own fixed slot
+                        so the string never shifts as digit widths change
+                        ("1" vs "6"); the integer half grows leftward and the
+                        fraction half is fixed-width. */}
+                    <span className={styles.odInt} aria-hidden="true">
+                      {fmt(displayedMult).split('.')[0].split('').map((d, i, arr) => (
+                        <span key={arr.length - i} className={styles.odSlot}>{d}</span>
+                      ))}
+                    </span>
+                    <span className={styles.odRight} aria-hidden="true">
+                      <span className={styles.odFrac}>
+                        <span className={styles.odDot}>.</span>
+                        {fmt(displayedMult).split('.')[1].split('').map((d, i) => (
+                          <span key={i} className={styles.odSlot}>{d}</span>
+                        ))}
+                      </span>
                       <span className={styles.centerX}>×</span>
-                    </div>
+                    </span>
+                    <span className={styles.odSrOnly}>{fmt(displayedMult)}×</span>
+                  </div>
                     {statusContent && <div className={styles.statusBox}>{statusContent}</div>}
                   </div>
                 )}

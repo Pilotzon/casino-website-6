@@ -235,10 +235,14 @@
 }
 
 .activeOutline {
+  /* Two nested bands: the inner 3px band (#717980 over the stage) and the
+   * outer 6px band (#273740). Radius reduced 16px → 13px so the outline
+   * nests with the card art's 10px corners at the 3px ring offset
+   * (10 + 3 = 13) — the mismatched 16px radius broke the nested-border look. */
   box-shadow:
     0 0 0 3px rgba(255, 255, 255, 0.30),
     0 0 0 6px rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
+  border-radius: 13px;
 }
 
 /* ═══════ Multiplier Pills ═══════ */
@@ -316,9 +320,14 @@
 
 .choicePads {
   display: grid;
-  grid-template-columns: repeat(3, 148px);
-  gap: 26px;
+  /* minmax(0, 148px): fixed 148px cap but columns CAN shrink on narrow
+   * stages — repeat(3, 148px) + 26px gaps overflowed ~496px on mobile.
+   * max-width 496px keeps desktop pixel-identical (3×148 + 2×26). */
+  grid-template-columns: repeat(3, minmax(0, 148px));
+  gap: clamp(8px, 2.5vw, 26px);
   justify-content: center;
+  width: 100%;
+  max-width: 496px;
 }
 
 .padBtn {
@@ -340,7 +349,7 @@
 }
 
 .padOuter {
-  width: 148px;
+  width: 100%;
   height: 128px;
   position: relative;
   display: flex;
@@ -353,7 +362,7 @@
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 148px;
+  width: 100%;
   height: 128px;
   border-radius: 16px;
   background: #557086;
@@ -396,7 +405,7 @@
 }
 
 .padInnerDark {
-  width: 124px;
+  width: calc(100% - 24px);
   height: 90px;
   border-radius: 12px;
   background: #0E212E;
@@ -406,7 +415,7 @@
 }
 
 .padIcon {
-  width: 64px;
+  width: min(64px, 52%);
   height: 64px;
   object-fit: contain;
   opacity: 0.95;

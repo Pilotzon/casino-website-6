@@ -166,17 +166,72 @@
 .centerMult {
   font-size: clamp(48px, 8vw, 110px);
   font-weight: 900;
-  letter-spacing: -1px;
+  letter-spacing: 0;
   line-height: 1;
   text-shadow: 0 6px 28px rgba(0,0,0,0.55);
   display: flex;
   align-items: baseline;
   justify-content: center;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on, "salt" on;
 }
+
+/* Fixed-width digit slots — the same odometer system as Limbo's number
+   display: every digit occupies an identical slot, so "1" and "6" take the
+   same space and the multiplier never shifts/re-centres as digits change
+   width. The integer half is right-aligned (new digits slot in on the LEFT)
+   and the fraction half is fixed-width. */
+.odInt {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.odRight {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.odFrac {
+  display: flex;
+  justify-content: flex-start;
+  align-items: baseline;
+}
+
+.odSlot {
+  width: 0.6em;
+  flex: 0 0 auto;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.odDot {
+  width: 0.32em;
+  flex: 0 0 auto;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.odSrOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .centerX {
   font-size: 0.65em;
   opacity: 0.85;
   margin-left: 2px;
+  flex: 0 0 auto;
+  letter-spacing: 0;
 }
 /* Crashed: the multiplier turns red — and does NOTHING else. The old
    left-right shake made the number look like it was vibrating for half a

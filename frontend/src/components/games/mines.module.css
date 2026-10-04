@@ -295,8 +295,11 @@
 /* The whole board is revealed when the round ends. Tiles the player pressed
    stay at full opacity; every auto-revealed tile darkens to 0.7 — but only
    starting ONE SECOND after the round ends, fading in over 0.3s (the .tile
-   opacity transition), never darkening the instant the round is over. */
-.tileDimmed {
+   opacity transition), never darkening the instant the round is over.
+   Scoped to .tile (0-2-0) so it BEATS .tile:disabled's `opacity: 1` —
+   revealed tiles are disabled buttons, and a bare class loses that fight
+   (the dim used to be silently dead CSS). */
+.tile.tileDimmed {
   opacity: 0.7;
 }
 

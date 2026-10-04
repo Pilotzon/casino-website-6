@@ -219,7 +219,9 @@ function toUiCard(c) {
   if (c.hidden) return { hidden: true };
   return {
     id: c.id,
-    r: c.r ?? c.rank ?? c.value,
+    // one normalized rank encoding ("A"/"2"…"10"/"J"/"Q"/"K") — the server
+    // may send r / rank / value in string OR numeric shape
+    r: normalizeRank(c.r ?? c.rank ?? c.value),
     s: c.s ?? c.suit,
     hidden: false,
   };
@@ -249,10 +251,31 @@ function sum(arr) {
   return (arr || []).reduce((a, b) => a + (Number(b) || 0), 0);
 }
 
+// Blackjack totals — ONE shared truth for every pill and projection.
+//
+// A rank may arrive as "A" (the deck's own encoding) or as a plain number
+// (the { suit, value } fallbacks: 1 for an ace, 10 for a ten). Normalize
+// once so an ace is ALWAYS valued the blackjack way — 11, demoted to 1 only
+// when the hand would bust — and the display can never drop the two-digit
+// total for a hand that contains an ace (the "19 shows as 9" bug).
+function normalizeRank(r) {
+  if (r == null) return null;
+  const s = String(r).trim().toUpperCase();
+  if (s === "A" || s === "1") return "A";
+  if (s === "K" || s === "Q" || s === "J" || s === "10") return s;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 2 && n <= 10 ? String(n) : s;
+}
+
+function isAceRank(r) {
+  return normalizeRank(r) === "A";
+}
+
 function rankValue(r) {
-  if (r === "A") return 11;
-  if (["K", "Q", "J"].includes(r)) return 10;
-  const n = Number(r);
+  const s = normalizeRank(r);
+  if (s === "A") return 11;
+  if (["K", "Q", "J", "10"].includes(s)) return 10;
+  const n = Number(s);
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -262,7 +285,7 @@ function handTotalUi(hand) {
 
   for (const c of hand || []) {
     total += rankValue(c?.r);
-    if (c?.r === "A") aces += 1;
+    if (isAceRank(c?.r)) aces += 1;
   }
 
   while (total > 21 && aces > 0) {
@@ -273,15 +296,19 @@ function handTotalUi(hand) {
   return total;
 }
 
-// Pill text for a hand. Soft hands (an ace that can still count as 11)
-// ALWAYS show BOTH totals — e.g. A+5 renders "6, 16".
-function handTotalDisplay(hand) {
+// Pill text for a hand. A GENUINELY soft hand (an ace still counting as 11,
+// never a hard total) shows BOTH totals while the hand is being played —
+// e.g. A+8 renders "9, 19" — and only the FINAL total ("19") once the round
+// is resolved on screen. Hard totals always show their single number; the
+// comma form never applies to them. A hand summing to 19 always displays
+// as 19 — never as its low half.
+function handTotalDisplay(hand, { final = false } = {}) {
   const cards = hand || [];
   let low = 0;
   let aces = 0;
 
   for (const c of cards) {
-    if (c?.r === "A") {
+    if (isAceRank(c?.r)) {
       aces += 1;
       low += 1;
     } else {
@@ -289,13 +316,15 @@ function handTotalDisplay(hand) {
     }
   }
 
-  const high = aces > 0 ? low + 10 : low;
+  // soft = at least one ace still counts as 11 without busting
+  const soft = aces > 0 && low + 10 <= 21;
+  const high = soft ? low + 10 : low;
 
-  if (aces > 0 && cards.length > 1 && high <= 21) {
+  if (soft && cards.length > 1 && !final) {
     return `${low}, ${high}`;
   }
 
-  return `${high <= 21 ? high : low}`;
+  return `${high}`;
 }
 
 export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
@@ -1510,7 +1539,8 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                     {handTotalDisplay(
                       shownDealer
                         .filter((c) => !c?.hidden)
-                        .slice(0, ui.dealerShownCount)
+                        .slice(0, ui.dealerShownCount),
+                      { final: resultShown }
                     )}
                   </div>
                 ) : null}
@@ -1565,7 +1595,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                   // own position, and it then rides the hand's re-centring
                   // glide into the two-card layout as card #2 arrives
                   const shown = ui.playerLandedCounts?.[hIdx] ?? 0;
-                  const total = handTotalDisplay(hand.slice(0, shown));
+                  const total = handTotalDisplay(hand.slice(0, shown), { final: resultShown });
                   const outcome = ui.handOutcomes?.[hIdx] ?? null;
 
                   const settled = ui.showResult && ui.phase === "settled";

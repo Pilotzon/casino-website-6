@@ -735,6 +735,7 @@ async function main() {
       ok(__dash.calls.length === 0, 'nothing is fetched until it is opened');
 
       toggle.click();
+      await sleep(30); // let the click's state flush before polling the panel
       ok(await waitFor(() => !!q(host, 'balance-recent'), 2000), "opening it loads today's activity");
       ok(toggle.getAttribute('aria-expanded') === 'true', 'the toggle reports it is open');
       const mid = new Date(); mid.setHours(0, 0, 0, 0);
@@ -1104,6 +1105,154 @@ async function main() {
       && /margin-top: auto/.test(readCss('src/styles/global.css'))
       && /margin-top: auto/.test(readCss('src/pages/games.module.css')),
       'dice, limbo, the shared hover boxes and the games stats grid bottom-align their controls');
+  }
+
+  /* ------------- §8c total pills: a 19 always reads 19, the comma is soft -- */
+  console.log('\n=== 8c. Blackjack totals: a 19 always reads 19; the comma only for a soft ace ===');
+  {
+    const { default: Blackjack } = await import('../../src/components/games/Blackjack.jsx');
+    const realFetch = globalThis.fetch;
+    const C = (r, s = 'spades') => ({ id: `${r}-${s}`, r, s });
+    let answer = null;
+    globalThis.fetch = async () => ({ ok: true, json: async () => answer });
+    const bjRow = { name: 'blackjack', display_name: 'Blackjack', is_enabled: 1, is_mobile_enabled: 1 };
+    const mountBj = () => mount(
+      React.createElement(ToastProvider, null,
+        React.createElement(ActiveBetProvider, null,
+          React.createElement(Blackjack, { gameRow: bjRow })))
+    );
+    const betBtn = (host) => host.querySelector('.sidebar-bet-button');
+    const dealerPill = (host) => host.querySelector('.css-totalPillDark');
+    const playerPill = (host) => host.querySelector('.css-totalPillPlayer');
+    const bet = async (host, payload) => {
+      answer = payload;
+      setInputValue(host.querySelector('input[type=number]'), '10');
+      await sleep(60);
+      betBtn(host)?.click();
+    };
+
+    // --- a settled hard 19: the pill reads exactly "19" once the hole is up
+    //     (while the hole is down it shows the up-card total — by design)
+    const host = mountBj();
+    await sleep(80);
+    await bet(host, {
+      success: true,
+      gameState: {
+        roundId: 't1', status: 'finished', activeHandIndex: 0,
+        playerHands: [[C('10', 'spades'), C('9', 'hearts')]],
+        dealerHand: [C('9', 'clubs'), C('10', 'diamonds')],
+        handTotals: [19], handBets: [10], handOutcomes: ['push'], payout: 10,
+        dealerTotal: 19, dealerShownTotal: 9, balance: 110,
+      },
+    });
+    ok(await waitFor(() => dealerPill(host)?.textContent === '19', 5000),
+      'a dealer 19 always displays 19 — never 9, never a truncation',
+      dealerPill(host)?.textContent);
+    ok(!/,/.test(dealerPill(host)?.textContent ?? ''),
+      'a hard total never wears the soft-ace comma', dealerPill(host)?.textContent);
+    unmountAll();
+    await sleep(60);
+
+    // --- a soft 19 mid-hand: the ONLY case the comma exists for
+    const host2 = mountBj();
+    await sleep(80);
+    await bet(host2, {
+      success: true,
+      gameState: {
+        roundId: 't2', status: 'player_turn', activeHandIndex: 0,
+        playerHands: [[C('A', 'spades'), C('8', 'hearts')]],
+        dealerHand: [C('5', 'clubs'), { hidden: true }],
+        handTotals: [19], handBets: [10], handOutcomes: [null], payout: 0,
+        dealerTotal: 5, dealerShownTotal: 5, balance: 105,
+      },
+    });
+    ok(await waitFor(() => playerPill(host2)?.textContent === '9, 19', 4000),
+      'a genuine soft ace mid-hand shows both readings — and only then',
+      playerPill(host2)?.textContent);
+    // …and the same hand SETTLED drops the comma: final shows only 19
+    answer = {
+      success: true,
+      gameState: {
+        roundId: 't2', status: 'finished', activeHandIndex: 0,
+        playerHands: [[C('A', 'spades'), C('8', 'hearts')]],
+        dealerHand: [C('5', 'clubs'), C('2', 'diamonds'), C('K', 'spades')],
+        handTotals: [19], handBets: [10], handOutcomes: ['lose'], payout: 0,
+        dealerTotal: 17, dealerShownTotal: 17, balance: 105,
+      },
+    };
+    [...host2.querySelectorAll('button')].find((b) => /Stand/.test(b.textContent))?.click();
+    ok(await waitFor(() => playerPill(host2)?.textContent === '19', 5000),
+      'the FINAL total shows only 19 — the comma form is gone once the round settles',
+      playerPill(host2)?.textContent);
+    unmountAll();
+    await sleep(60);
+
+    // --- numeric-shape ranks (1 for A): still an ace, still 19
+    const host3 = mountBj();
+    await sleep(80);
+    await bet(host3, {
+      success: true,
+      gameState: {
+        roundId: 't3', status: 'finished', activeHandIndex: 0,
+        playerHands: [[{ id: 'a1', r: 1, s: 'spades' }, { id: '8h', r: 8, s: 'hearts' }]],
+        dealerHand: [C('9', 'clubs'), C('10', 'diamonds')],
+        handTotals: [19], handBets: [10], handOutcomes: ['push'], payout: 10,
+        dealerTotal: 19, dealerShownTotal: 9, balance: 110,
+      },
+    });
+    ok(await waitFor(() => playerPill(host3)?.textContent === '19', 5000),
+      'a numeric-shape ace still totals 19 (and reads 19 once settled)',
+      playerPill(host3)?.textContent);
+    unmountAll();
+    await sleep(60);
+
+    // --- a lone soft ace reads 11 (the soft display needs 2+ cards)
+    const host4 = mountBj();
+    await sleep(80);
+    await bet(host4, {
+      success: true,
+      gameState: {
+        roundId: 't4', status: 'player_turn', activeHandIndex: 0,
+        playerHands: [[C('A', 'spades')]],
+        dealerHand: [C('5', 'clubs'), { hidden: true }],
+        handTotals: [11], handBets: [10], handOutcomes: [null], payout: 0,
+        dealerTotal: 5, dealerShownTotal: 5, balance: 105,
+      },
+    });
+    ok(await waitFor(() => playerPill(host4)?.textContent === '11', 2500),
+      'a lone soft ace reads 11 — never "1, 11"',
+      playerPill(host4)?.textContent);
+    unmountAll();
+    globalThis.fetch = realFetch;
+    await sleep(60);
+  }
+
+  /* ------------- §8d RPS: pads contained + the card outline nests -------- */
+  console.log('\n=== 8d. RPS: the three choice pads stay inside the stage + the outline nests ===');
+  {
+    const css = readCss('src/components/games/RPS.module.css');
+    ok(/grid-template-columns:\s*repeat\(3,\s*minmax\(0,\s*148px\)\)/.test(css),
+      'the pad columns are capped at 148px but CAN shrink — a fixed 3×148px row overflowed phones');
+    const pads = /\.choicePads\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    ok(/width:\s*100%/.test(pads) && /max-width:\s*496px/.test(pads),
+      'the pad row fills the stage up to the desktop 496px (3×148 + 2×26) — desktop unchanged',
+      pads.replace(/\s+/g, ' '));
+    ok(/gap:\s*clamp\(8px,\s*2\.5vw,\s*26px\)/.test(pads),
+      'the gaps shrink with the viewport so all three pads stay inside the stage');
+    ok(/\.padOuter\s*\{[^}]*width:\s*100%/.test(css)
+      && /\.padBase\s*\{[^}]*width:\s*100%/.test(css)
+      && /\.padInnerDark\s*\{[^}]*width:\s*calc\(100% - 24px\)/.test(css)
+      && /\.padIcon\s*\{[^}]*width:\s*min\(64px,\s*52%\)/.test(css),
+      'every pad layer scales with its column (base, top face, dark inset, icon)');
+
+    // the dealer-side centred card: the outline nests with the card corners
+    const outline = /\.activeOutline\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    ok(/border-radius:\s*13px/.test(outline),
+      "the centred dealer card's outline radius nests with the 10px card corners (10 + 3px ring)",
+      outline.replace(/\s+/g, ' '));
+    ok(/0 0 0 3px rgba\(255,\s*255,\s*255,\s*0\.30\)/.test(outline)
+      && /0 0 0 6px rgba\(255,\s*255,\s*255,\s*0\.08\)/.test(outline),
+      'both nested bands survive: the #717980 inner ring and the #273740 outer ring');
   }
 
   /* --------------------- §9 Dice / Limbo: pills + marker in ONE overlay row */
