@@ -16,8 +16,14 @@
  *       nav (white bold labels) and the navbar balance box + today panel
  *   §8  Blackjack: a dealt blackjack (player OR dealer) reveals its hole card
  *       inside the deal, the win popup/payout styling waits for the flips, the
- *       bet button stays disabled while the dealer is still drawing, and the
- *       card geometry lives in the CSS tokens (smaller on phones)
+ *       bet button stays disabled while the dealer is still drawing, a natural
+ *       21 settles in the standard win green (no gold state), the sidebar
+ *       result readout lands only with the reveal ("Round lost", "Bet"), and
+ *       the card geometry lives in the CSS tokens (smaller on phones)
+ *   §8b Blackjack split hands: the turn indicator (plain light-blue result
+ *       treatment) sits only on the active hand of a split and never moves
+ *       mid-flip; Mines/Tower post-round tiles darken at +1s with a fade;
+ *       wrap-proof control rows (margin-top: auto) everywhere
  *   §9  Dice / Limbo: the My-bets marker sits IN the pills row (pills left,
  *       marker right) and that row is an overlay — it can never push the game
  *       layout down
@@ -826,8 +832,9 @@ async function main() {
     );
     const playerCards = (host) => host.querySelector('.css-fanBottom .css-cardSlot .css-card')?.className ?? '';
 
-    // --- a DEALT blackjack: gold state + popup only once the cards have
-    //     finished flipping, and the hole turns over inside the deal
+    // --- a DEALT blackjack: the standard win treatment (no gold state) +
+    //     popup only once the cards have finished flipping, and the hole
+    //     turns over inside the deal
     const host = mountBj();
     await sleep(80);
     await bet(host, {
@@ -843,17 +850,17 @@ async function main() {
     await sleep(560);
     ok(betBtn(host)?.disabled === true, 'a dealt round keeps the bet button disabled');
     ok(!host.querySelector('.ui-win-popup'), 'no win popup while the cards are still dealing');
-    ok(!/cardOutlineBlackjack/.test(playerCards(host)), 'no blackjack border before the cards land');
+    ok(!/cardOutlineWin/.test(playerCards(host)), 'no outcome border before the cards land');
     ok(!holeUp(host), 'the hole card is still face-down while it flies');
     await sleep(1500);                    // the player's cards have flipped, the hole is turning
     ok(holeUp(host), 'the dealt hole card is turned over during the deal itself');
     ok(!host.querySelector('.ui-win-popup'), 'still no popup while that reveal is running');
     ok(await waitFor(() => !!host.querySelector('.ui-win-popup'), 2500),
       'the win popup lands only after the flips are done');
-    ok(/cardOutlineBlackjack/.test(playerCards(host)), 'blackjack cards wear their own border', playerCards(host));
-    ok(!!host.querySelector('.css-totalBlackjack'), 'and their own total tone');
-    ok(!/cardOutlineWin|cardOutlinePush|cardOutlineLose/.test(playerCards(host)),
-      'never the win / push / loss border');
+    ok(/cardOutlineWin/.test(playerCards(host)), 'a natural 21 settles in the standard win green', playerCards(host));
+    ok(!!host.querySelector('.css-totalWin'), 'and the standard win total tone');
+    ok(!/cardOutlinePush|cardOutlineLose/.test(playerCards(host)),
+      'a natural 21 wears no push/loss border and nothing gold');
     ok(await waitFor(() => betBtn(host)?.disabled === false, 1500),
       'the bet button re-arms once the round is fully revealed');
     unmountAll();
@@ -889,9 +896,17 @@ async function main() {
     await sleep(400);
     ok(betBtn(host2)?.disabled === true, 'the bet button stays disabled while the dealer is still drawing');
     ok(!/cardOutlineLose/.test(playerCards(host2)), 'and the cards are not styled as a loss yet');
+    ok(/Profit on Win/.test(host2.textContent) && /at risk/.test(host2.textContent)
+      && !/Round lost|Round won|Round settled|Net Result/.test(host2.textContent),
+      'the sidebar keeps the in-progress readout while the dealer draws — the result is not leaked early',
+      host2.textContent.slice(0, 200));
     ok(await waitFor(() => betBtn(host2)?.disabled === false, 2500),
       'it re-arms only once the round result is on screen');
     ok(/cardOutlineLose/.test(playerCards(host2)), 'the loss border arrives with the reveal');
+    ok(/Net Result/.test(host2.textContent) && /Round lost/.test(host2.textContent),
+      'the settled readout lands with the reveal and says Round lost', host2.textContent.slice(0, 200));
+    ok(betBtn(host2)?.textContent.trim() === 'Bet',
+      'the re-armed bet button says Bet (the settled label is not New Bet)', betBtn(host2)?.textContent);
     unmountAll();
     await sleep(60);
 
@@ -946,9 +961,149 @@ async function main() {
     ok(/getComputedStyle/.test(bjJsx) && /--bj-card-w/.test(bjJsx) && /--bj-overlap-x/.test(bjJsx),
       'the fan seats + deck flight are measured from the same tokens');
 
+    // --- contracts: the split-hand indicator is the result-state treatment
+    //     in plain light blue, a natural 21 settles as a plain win, the total
+    //     pill carries no outline, insurance buttons carry no icons, and the
+    //     sidebar result readout is gated on the reveal
+    ok(!/handWrapActive/.test(bjCss) && !/content:\s*["']YOUR TURN/.test(bjCss),
+      'no glow / "YOUR TURN" pill chrome survives — the indicator is outline + pill only');
+    ok(/cardOutlineActive/.test(bjCss) && /\.totalActive/.test(bjCss) && /cardOutlineActive/.test(bjJsx),
+      'the active split hand wears the plain outline + pill treatment');
+    ok(!/cardOutlineBlackjack|totalBlackjack|blackjack-gold/.test(bjCss) && !/cardOutlineBlackjack|totalBlackjack/.test(bjJsx),
+      'a natural 21 has no state of its own — it settles as a plain win');
+    ok(!/0 0 0 2px var\(--color-bg-game\)/.test(bjCss),
+      'the total pill carries no outline / border ring in any state');
+    const globals = readCss('src/styles/global.css');
+    ok(!/color-blackjack-active:\s*var\(--color-accent-red\)/.test(globals)
+      && /color-blackjack-active:\s*#[0-9a-fA-F]{6}/.test(globals),
+      'the turn indicator token is a plain light blue, not the accent red');
+    ok(!/marker=/.test(bjJsx), 'insurance buttons carry no marker icons — single-row labels');
+    ok(/resultShown = ui\.showResult/.test(bjJsx),
+      'the sidebar result readout is gated on the reveal, not on the stand response');
+
     unmountAll();
     globalThis.fetch = realFetch;
     await sleep(60);
+  }
+
+  /* ------------- §8b split turn indicator + tile dim + wrap-proof rows ---- */
+  console.log('\n=== 8b. Split-hand turn indicator timing + post-round tile dim + wrap-proof rows ===');
+  {
+    const { default: Blackjack } = await import('../../src/components/games/Blackjack.jsx');
+    const realFetch = globalThis.fetch;
+    const C = (r, s = 'spades') => ({ id: `${r}-${s}`, r, s });
+    let answer = null;
+    globalThis.fetch = async () => ({ ok: true, json: async () => answer });
+
+    const bjRow = { name: 'blackjack', display_name: 'Blackjack', is_enabled: 1, is_mobile_enabled: 1 };
+    const mountBj = () => mount(
+      React.createElement(ToastProvider, null,
+        React.createElement(ActiveBetProvider, null,
+          React.createElement(Blackjack, { gameRow: bjRow })))
+    );
+    const betBtn = (host) => host.querySelector('.sidebar-bet-button');
+    const btn = (host, re) => [...host.querySelectorAll('button')].find((b) => re.test(b.textContent));
+    const handWraps = (host) => [...host.querySelectorAll('.css-handWrap')];
+    const turnOn = (host, i) => handWraps(host)[i]?.getAttribute('aria-current') === 'step';
+
+    // --- split hands: standing on the first hand must NOT shove the turn
+    //     indicator onto the next hand while card flips are still running
+    const host = mountBj();
+    await sleep(80);
+    answer = {
+      success: true,
+      gameState: {
+        roundId: 'sp1', status: 'player_turn', activeHandIndex: 0,
+        playerHands: [[C('8', 'spades'), C('8', 'hearts')]],
+        dealerHand: [C('5', 'clubs'), { hidden: true }],
+        handTotals: [16], handBets: [10], handOutcomes: [null], payout: 0,
+        dealerTotal: 5, dealerShownTotal: 5, balance: 105,
+      },
+    };
+    setInputValue(host.querySelector('input[type=number]'), '10');
+    await sleep(60);
+    betBtn(host)?.click();
+    await sleep(250);
+    answer = {
+      success: true,
+      gameState: {
+        roundId: 'sp1', status: 'player_turn', activeHandIndex: 0,
+        playerHands: [[C('8', 'spades'), C('2', 'diamonds')], [C('8', 'hearts'), C('3', 'clubs')]],
+        dealerHand: [C('5', 'clubs'), { hidden: true }],
+        handTotals: [10, 11], handBets: [10, 10], handOutcomes: [null, null], payout: 0,
+        dealerTotal: 5, dealerShownTotal: 5, balance: 95,
+      },
+    };
+    btn(host, /Split/)?.click();
+    await sleep(120);
+    ok(turnOn(host, 0), 'a fresh split shows the indicator on the first hand');
+    ok(!turnOn(host, 1), 'and never on two hands at once');
+    // stand IMMEDIATELY — the split's fresh cards are still flipping
+    answer = {
+      success: true,
+      gameState: {
+        roundId: 'sp1', status: 'player_turn', activeHandIndex: 1,
+        playerHands: [[C('8', 'spades'), C('2', 'diamonds')], [C('8', 'hearts'), C('3', 'clubs')]],
+        dealerHand: [C('5', 'clubs'), { hidden: true }],
+        handTotals: [10, 11], handBets: [10, 10], handOutcomes: [null, null], payout: 0,
+        dealerTotal: 5, dealerShownTotal: 5, balance: 95,
+      },
+    };
+    btn(host, /Stand/)?.click();
+    await sleep(150);
+    ok(turnOn(host, 0), 'standing on hand 1 keeps the indicator there while card flips are still running');
+    ok(!turnOn(host, 1), 'it has not jumped to the next hand mid-flip');
+    ok(await waitFor(() => turnOn(host, 1), 3500),
+      'and it moves to the next hand only once the flips are fully complete');
+    ok(!turnOn(host, 0), 'exactly one hand wears the indicator');
+    unmountAll();
+    await sleep(60);
+
+    // --- a normal single hand NEVER wears the turn indicator
+    const hostSolo = mountBj();
+    await sleep(80);
+    answer = {
+      success: true,
+      gameState: {
+        roundId: 'sp2', status: 'player_turn', activeHandIndex: 0,
+        playerHands: [[C('10', 'spades'), C('9', 'hearts')]],
+        dealerHand: [C('5', 'clubs'), { hidden: true }],
+        handTotals: [19], handBets: [10], handOutcomes: [null], payout: 0,
+        dealerTotal: 5, dealerShownTotal: 5, balance: 105,
+      },
+    };
+    setInputValue(hostSolo.querySelector('input[type=number]'), '10');
+    await sleep(60);
+    betBtn(hostSolo)?.click();
+    await sleep(300);
+    ok(!turnOn(hostSolo, 0), 'a single (unsplit) hand never wears the turn indicator');
+    unmountAll();
+    globalThis.fetch = realFetch;
+    await sleep(60);
+
+    // --- post-round tile dim: clicked tiles stay bright; the other revealed
+    //     tiles darken only from 1s after the round end, with a brief fade
+    const minesCss = readCss('src/components/games/mines.module.css');
+    const minesJsx = readCss('src/components/games/Mines.jsx');
+    ok(/POST_ROUND_DIM_MS = 1000/.test(minesJsx) && /armPostRoundDim/.test(minesJsx),
+      'Mines arms its post-round darkening 1s after the round ends');
+    ok(/postRoundDim && isRevealed && !userPressed/.test(minesJsx),
+      'only the auto-revealed tiles darken — clicked tiles keep normal opacity');
+    ok(/transition: transform 0s ease, background-color 0.35s ease, opacity 0.3s ease/.test(minesCss),
+      'the darkening is a brief fade, never an instant dim');
+    const towerCss = readCss('src/components/games/tower.module.css');
+    ok(/\.tile\.tileAutoRevealed/.test(towerCss) && /opacity: 0\.7/.test(towerCss)
+      && /\.tile \{[^}]*transition: opacity 0.3s ease/.test(towerCss),
+      "Tower's auto-revealed tiles fade into the dim as they land, never popping dark");
+
+    // --- wrap-proof control rows: when a label wraps to two lines the row's
+    //     buttons shift down together (margin-top: auto bottom-aligns the
+    //     controls) in every [label above control] layout
+    ok(/margin-top: auto/.test(readCss('src/components/games/dice.module.css'))
+      && /margin-top: auto/.test(readCss('src/components/games/limbo.module.css'))
+      && /margin-top: auto/.test(readCss('src/styles/global.css'))
+      && /margin-top: auto/.test(readCss('src/pages/games.module.css')),
+      'dice, limbo, the shared hover boxes and the games stats grid bottom-align their controls');
   }
 
   /* --------------------- §9 Dice / Limbo: pills + marker in ONE overlay row */

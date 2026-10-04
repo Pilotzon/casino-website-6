@@ -27,6 +27,9 @@ const CELL_COUNT = GRID_SIZE * GRID_SIZE;
 // Full click animation: 450ms cover flight + the icon zoom (starts 392ms
 // in, runs 300ms) — the rest of the board reveals only after this.
 const CLICK_ANIM_MS = 700;
+// Post-round darkening: the auto-revealed tiles keep full opacity for one
+// second after the round ends, then FADE into the dimmed state (0.3s).
+const POST_ROUND_DIM_MS = 1000;
 // Gem/mine stings wait for the icon's zoom-in to begin — this MUST match
 // the animation-delay on .icon in mines.module.css (392ms).
 const ICON_REVEAL_DELAY_MS = 392;
@@ -97,6 +100,11 @@ function Mines({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   // tile the player clicked when the mine hit (stays full opacity)
   const [lossMineIdx, setLossMineIdx] = useState(null);
 
+  // post-round darkening: auto-revealed tiles stay bright for 1s after the
+  // round ends, then fade to the dimmed state (a new round voids the timer)
+  const [postRoundDim, setPostRoundDim] = useState(false);
+  const postRoundTokenRef = useRef(0);
+
   // ✅ Win popup (Limbo-like) for cashout
   const [showWinPopup, setShowWinPopup] = useState(false);
   const [lastCashoutPayout, setLastCashoutPayout] = useState(0);
@@ -135,6 +143,8 @@ function Mines({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   const reset = () => {
     animRef.current += 1;
     soundGenRef.current += 1;
+    postRoundTokenRef.current += 1;
+    setPostRoundDim(false);
     setCells(Array.from({ length: CELL_COUNT }, () => "hidden"));
     setRevealedCells([]);
     setMinePositions(null);
@@ -150,6 +160,16 @@ function Mines({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
     setLastCashoutMult(1);
 
     resetGemSoundState();
+  };
+
+  // Darken the auto-revealed tiles starting exactly one second after the
+  // round ends (loss OR cashout) — a brief fade, never an instant dim. The
+  // tiles the player pressed are never dimmed (see `dimmed` in the render).
+  const armPostRoundDim = () => {
+    const myToken = ++postRoundTokenRef.current;
+    setTimeout(() => {
+      if (postRoundTokenRef.current === myToken) setPostRoundDim(true);
+    }, POST_ROUND_DIM_MS);
   };
 
   const adjustBet = (factor) => {
@@ -250,6 +270,9 @@ function Mines({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
       if (data.hitMine) {
         // reset streak/buff on mine
         resetGemSoundState();
+        // the round is over NOW — the auto-revealed tiles darken only
+        // starting one second from this moment (see armPostRoundDim)
+        armPostRoundDim();
 
         // A mine hit reveals the ENTIRE board — but sequenced: the clicked
         // tile plays its own click animation first, and only once it has
@@ -340,6 +363,9 @@ function Mines({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
       setCurrentMultiplier(Number(data.multiplier) || currentMultiplier);
       setInProgress(false);
       setDidLose(false);
+      // the round is over NOW — the auto-revealed tiles darken only
+      // starting one second from this moment (see armPostRoundDim)
+      armPostRoundDim();
 
       // ✅ show win popup for cashout
       const payout = Number(data.payout || 0);
@@ -444,10 +470,12 @@ function Mines({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
             const isRevealed = st === "gem" || st === "mine";
             // Tiles the player pressed (gems + the fatal mine) stay full
             // opacity; everything auto-revealed at round end (loss OR
-            // cashout) is dimmed to 0.7. On a mine hit the rest reveal
-            // only after the clicked tile's animation fully finishes.
+            // cashout) darkens to 0.7 — but only from ONE SECOND after the
+            // round ends, fading in (postRoundDim + the .tile opacity
+            // transition). On a mine hit the rest reveal only after the
+            // clicked tile's animation fully finishes.
             const userPressed = revealedCells.includes(i) || i === lossMineIdx;
-            const dimmed = ended && isRevealed && !userPressed;
+            const dimmed = ended && postRoundDim && isRevealed && !userPressed;
 
             return (
               <button

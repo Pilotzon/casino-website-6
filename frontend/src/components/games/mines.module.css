@@ -121,8 +121,9 @@
      This handles the reset animation when starting a new game.
      (The tile itself is shadowless — the cover carries the bevel so the
      whole face, shadow included, scales as one piece on click.)
+     opacity rides the post-round darkening fade (see .tileDimmed).
   */
-  transition: transform 0s ease, background-color 0.35s ease;
+  transition: transform 0s ease, background-color 0.35s ease, opacity 0.3s ease;
 
   display: flex;
   justify-content: center;
@@ -288,11 +289,13 @@
 }
 
 /* ========================================= */
-/* LOSS DIMMING (AFTER HIT MINE)              */
+/* POST-ROUND DIMMING (LOSS / CASHOUT)        */
 /* ========================================= */
 
-/* The whole board is revealed on a mine hit. Tiles the player pressed stay
-   at full opacity; every auto-revealed tile is dimmed to 0.7. */
+/* The whole board is revealed when the round ends. Tiles the player pressed
+   stay at full opacity; every auto-revealed tile darkens to 0.7 — but only
+   starting ONE SECOND after the round ends, fading in over 0.3s (the .tile
+   opacity transition), never darkening the instant the round is over. */
 .tileDimmed {
   opacity: 0.7;
 }

@@ -275,7 +275,9 @@
   --color-action-stand: #9000ff;
   --color-action-heads: #fca311;
   --color-action-tails: #3b82f6;
-  --color-blackjack-active: var(--color-accent-red);
+  /* Blackjack split-hand "your turn" indicator — plain light blue (the
+     result-state treatment: card outline + pill fill only). */
+  --color-blackjack-active: #57a8ff;
 
   /* Balance dropdown surfaces, borders, and loading treatment. */
   --color-balance-dropdown-bg: var(--color-bg-shell);
@@ -1937,6 +1939,12 @@ textarea::placeholder {
   border-radius: var(--radius-md);
   height: 44px;
   box-shadow: var(--shadow-md);
+  /* Wrap-proof alignment: when one box's label wraps to two lines at
+     laptop width its control would drop below the neighbour's — instead
+     the control rows bottom-align, so a wrapped label shifts every control
+     in the row down by exactly the wrap height and all buttons stay
+     vertically aligned with each other. */
+  margin-top: auto;
 }
 
 /* Sidebar readonly values use the same dimensions and hover surface as the

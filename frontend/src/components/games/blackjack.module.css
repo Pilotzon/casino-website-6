@@ -8,10 +8,6 @@
 .container {
   --lose-red: #E9103C;
 
-  /* A natural 21 wears its own GOLD state — distinct from the win green
-     (--accent-green), the push orange (#ff9d00) and the loss red. */
-  --blackjack-gold: #FFD700;
-
   /* ---- Card geometry: the ONE source of truth ----
      Blackjack.jsx reads these same custom properties (--bj-card-w/h,
      --bj-overlap-x/y) with getComputedStyle to seat the cards of a hand
@@ -116,7 +112,9 @@
   padding: 8px;
   font-size: 12px;
   line-height: 1.2;
-  white-space: normal;
+  /* the label is the whole button (no marker icon beside it) and always
+     renders as a single row — it never wraps to two lines */
+  white-space: nowrap;
 }
 
 /* Board */
@@ -194,36 +192,9 @@
   padding: 6px;
 }
 
-.handWrapActive {
-  outline: 2px solid var(--color-blackjack-active);
-  outline-offset: 1px;
-  background: color-mix(in srgb, var(--color-blackjack-active) 8%, transparent);
-  box-shadow: 0 0 20px color-mix(in srgb, var(--color-blackjack-active) 32%, transparent);
-}
-
-.handWrapActive::before {
-  content: "YOUR TURN";
-  position: absolute;
-  z-index: 25;
-  top: -24px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 3px 9px;
-  border: 1px solid var(--color-blackjack-active);
-  border-radius: 999px;
-  background: var(--color-bg-input);
-  color: var(--color-blackjack-active);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.handWrapActive .totalPillPlayer {
-  box-shadow: 0 0 0 2px var(--color-bg-game), 0 0 0 4px var(--color-blackjack-active), 0 4px 10px rgba(0, 0, 0, 0.35);
-}
+/* The split-hand turn indicator is the result-state treatment in light
+   blue — a plain card outline + a matching pill fill (see .cardOutlineActive
+   and .totalActive). No glow, no hand-wrap chrome, no "YOUR TURN" pill. */
 
 .fanBottom {
   position: absolute;
@@ -309,11 +280,11 @@
   color: #3a2200;
 }
 
-/* Natural 21 — the pill takes the same gold as the cards' blackjack
-   outline (the settled pill always mirrors its cards' state). */
-.totalBlackjack {
-  background: var(--blackjack-gold);
-  color: #2b1f00;
+/* Split-hand turn indicator: the pill takes the same treatment as the
+   settled outcomes (plain fill, no outline/border of any kind). */
+.totalActive {
+  background: var(--color-blackjack-active);
+  color: #0b1820;
 }
 
 /* Ribbon SVG */
@@ -404,12 +375,12 @@
     0 0 0 3px #ff9d00;
 }
 
-/* Blackjack (a natural 21): its own gold outline — NOT the win green, the
-   push orange or the loss red. */
-.cardOutlineBlackjack {
+/* Split-hand turn indicator: the SAME treatment as the outcome outlines,
+   in plain light blue. */
+.cardOutlineActive {
   box-shadow:
     0 14px 22px rgba(0, 0, 0, 0.28),
-    0 0 0 3px var(--blackjack-gold);
+    0 0 0 3px var(--color-blackjack-active);
 }
 
 /* Front card */

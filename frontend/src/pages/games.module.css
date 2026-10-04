@@ -844,6 +844,10 @@
   font-weight: 800;
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;
+  /* Wrap-proof alignment (same rule as the dice/limbo/hover stat rows): a
+     label that wraps to two lines shifts every value in the row down by
+     exactly the wrap height together, keeping them vertically aligned. */
+  margin-top: auto;
 }
 
 .mutedNote {

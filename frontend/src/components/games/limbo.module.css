@@ -196,6 +196,10 @@
   composes: sidebar-input-group from global;
   position: relative;
   box-shadow: var(--shadow-md);
+  /* Wrap-proof alignment: a bottomLabel that wraps to two lines must not
+     push its input/±-stepper below the neighbouring box's — the control
+     rows bottom-align instead, keeping both boxes' buttons level. */
+  margin-top: auto;
 }
 
 /* Even 8px padding like every sidebar input (global); the scoped rule

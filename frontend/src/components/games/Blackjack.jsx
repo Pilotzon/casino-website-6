@@ -350,6 +350,14 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   // hand's layout up so the re-centre glide begins with that card's movement
   // (see planHandLayouts)
   const layoutTimersRef = useRef([]);
+  // hand-switch turn indicator timer: the "your turn" marker may only move
+  // to the next split hand once every card flip still running on the table
+  // has fully completed (see applyServerState)
+  const turnSwitchTimerRef = useRef(null);
+  // absolute ms deadline per player hand: the moment its LAST card's deal
+  // flip is fully complete (flight end + flip). Steps the turn-indicator
+  // switch; maintained inside schedulePlayerTotalStep (one source).
+  const handAnimUntilRef = useRef([]);
 
   // ✅ Card deal sound timers (initial deal)
   const dealSoundTimersRef = useRef([]);
@@ -368,6 +376,9 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     dealer: [],
     playerHands: [[]],
     activeHandIndex: 0,
+    // the hand the "your turn" indicator sits on — moves to the next split
+    // hand only once the previous hand's card flips are fully complete
+    activeHandDisplay: 0,
 
     handTotals: [],
     handBets: [],
@@ -610,7 +621,12 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   const committedInsurance = ui.roundId ? Number(ui.insuranceBet || 0) : 0;
   const netResult = Number(ui.payout || 0) - committedHandBets - committedInsurance;
   const knownOutcomes = ui.showResult ? (ui.pendingOutcomes ?? ui.handOutcomes) : ui.handOutcomes;
-  const profitOnWin = ui.roundId && ui.phase === "settled"
+  // The sidebar readout must REFLECT the in-progress state until the round
+  // is actually resolved on screen (showResult — the moment the reveal has
+  // fired and every card has settled): switching it the instant a Stand
+  // response lands would leak the outcome while the dealer is still drawing.
+  const resultShown = ui.showResult && ui.phase === "settled";
+  const profitOnWin = ui.roundId && resultShown
     ? netResult
     : ui.roundId
       ? (ui.handBets || []).reduce((total, stake, index) => {
@@ -622,7 +638,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
         return total + Number(stake || 0) * (isNatural ? 1.5 : 1);
       }, -committedInsurance)
       : bet;
-  const profitMeta = ui.phase === "settled"
+  const profitMeta = resultShown
     ? ui.insurancePayout > 0
       ? "Insurance paid"
       : ui.insuranceBet > 0
@@ -630,7 +646,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
         : Math.abs(netResult) <= 1e-8
           ? "Push"
           : netResult < 0
-            ? "Round settled"
+            ? "Round lost"
             : "Round won"
     : ui.insurancePending
       ? `Insurance option: $${insuranceOffer.toFixed(2)}`
@@ -769,8 +785,13 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
   // Steps a hand's total the instant a card LANDS (its flight ends). Never
   // counts a card that is still flying — and the pill appears with the first
-  // card that lands, not with the second card of the deal.
+  // card that lands, not with the second card of the deal. The same call
+  // records when that card's deal-flip will be fully complete (landing +
+  // DEAL_FLIP_MS) — the turn indicator waits for that deadline before it
+  // may move to another hand.
   const schedulePlayerTotalStep = (handIdx, atMs, newCount) => {
+    const flipDoneAt = Date.now() + atMs + DEAL_FLIP_MS;
+    handAnimUntilRef.current[handIdx] = Math.max(handAnimUntilRef.current[handIdx] ?? 0, flipDoneAt);
     playerTotalTimersRef.current.push(
       setTimeout(() => {
         setUi((prev) => {
@@ -781,6 +802,37 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       }, atMs)
     );
   };
+
+  const clearTurnSwitchTimer = () => {
+    if (turnSwitchTimerRef.current) {
+      clearTimeout(turnSwitchTimerRef.current);
+      turnSwitchTimerRef.current = null;
+    }
+  };
+
+  // Move the turn indicator onto the server's active hand only once every
+  // card flip still running on the table has fully completed. React runs
+  // this effect after the response commit — by then every
+  // schedulePlayerTotalStep deadline for this response is recorded — so a
+  // hand switch during the split's fresh-card flips waits them out, and a
+  // hand with no pending flip gets the indicator at once.
+  useEffect(() => {
+    const target = ui.activeHandIndex ?? 0;
+    const display = ui.activeHandDisplay ?? 0;
+    if (target === display) return undefined;
+    const flipsDoneAt = (handAnimUntilRef.current ?? []).reduce(
+      (max, until) => Math.max(max, until ?? 0),
+      0
+    );
+    const wait = Math.max(0, flipsDoneAt - Date.now());
+    clearTurnSwitchTimer();
+    turnSwitchTimerRef.current = setTimeout(() => {
+      turnSwitchTimerRef.current = null;
+      setUi((prev) => ({ ...prev, activeHandDisplay: target }));
+    }, wait);
+    return clearTurnSwitchTimer;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ui.activeHandIndex, ui.activeHandDisplay]);
 
   // Initial deal: every card joins its label as it LANDS. The player's pill
   // therefore appears with the first card (one-card total) and counts the
@@ -918,8 +970,9 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       );
 
       for (let i = 2; i < dealer.length; i++) {
-        // each draw joins the total as its flip completes (not on landing)
-        const delay = dealerDealDelay(i) + DEAL_FLIGHT_MS + DEAL_FLIP_MS + shift;
+        // each draw joins the pill the instant its MOVEMENT (the flight)
+        // completes — never after its deal flip (same rule as the player's)
+        const delay = dealerDealDelay(i) + DEAL_FLIGHT_MS + shift;
 
         dealerTotalTimersRef.current.push(
           setTimeout(() => {
@@ -1051,6 +1104,16 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     // that step it up at each fresh card's flight start (see planHandLayouts)
     const handLayouts = planHandLayouts(gs, dealerShiftMs, { initialDeal, splitInfo });
 
+    // ── Turn-indicator hand switch ─────────────────────────────────────────
+    // The active HAND (logic) always follows the server immediately. The
+    // indicator (activeHandDisplay) follows it only once every card flip
+    // still running on the table has fully completed — standing on the first
+    // split hand must never shove the marker onto the next hand while cards
+    // are still turning over. The reconciliation (with the deadline wait)
+    // lives in the effect below the state: it runs AFTER this response's
+    // card deadlines have been recorded.
+    const nextActive = gs.activeHandIndex ?? 0;
+
     setUi((s) => ({
       ...s,
       phase: settled ? "settled" : gs.insurancePending ? "insurance" : "playerTurn",
@@ -1062,7 +1125,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
       dealer,
       playerHands,
-      activeHandIndex: gs.activeHandIndex ?? 0,
+      activeHandIndex: nextActive,
 
       handTotals: gs.handTotals ?? [],
       handBets: gs.handBets ?? [],
@@ -1143,6 +1206,8 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     clearLayoutTimers();
     clearDealSoundTimers();
     clearDealerSoundTimers();
+    clearTurnSwitchTimer();
+    handAnimUntilRef.current = [];
 
     // A NEW bet first clears the old table: every hand's cards slide out
     // down-left in parallel — each hand staggers its own cards left to
@@ -1337,22 +1402,20 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
             <p className={styles.insuranceHint}>
               Dealer shows an Ace. Insurance costs half your original bet.
             </p>
+            {/* No marker icons on these two: the label is the whole button
+                and always renders as a single row (never wrapped). */}
             <SidebarActionButton
               className={styles.insuranceChoice}
               label={`Insure · $${insuranceOffer.toFixed(2)}`}
               onClick={() => handleInsurance(true)}
               disabled={!canInsure}
               title={canInsure ? undefined : `You need $${insuranceOffer.toFixed(2)} available`}
-              marker="circle"
-              markerColor="var(--color-accent-red)"
             />
             <SidebarActionButton
               className={styles.insuranceChoice}
               label="No Insurance"
               onClick={() => handleInsurance(false)}
               disabled={ui.busy}
-              marker="circle"
-              markerColor="var(--color-text-muted)"
             />
           </div>
         ) : (
@@ -1393,13 +1456,13 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
             disabled={!canDeal || isLocked}
             title={isLocked ? betErrorMessage : undefined}
           >
-            {ui.busy ? "Dealing…" : ui.phase === "settled" ? "New Bet" : "Bet"}
+            {ui.busy ? "Dealing…" : "Bet"}
           </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
         <SidebarReadOnlyField
-          label={ui.phase === "settled" ? "Net Result" : "Profit on Win"}
+          label={resultShown ? "Net Result" : "Profit on Win"}
           value={Number.isFinite(profitOnWin) ? profitOnWin.toFixed(2) : "0.00"}
           meta={profitMeta}
           currency
@@ -1506,41 +1569,50 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                   const outcome = ui.handOutcomes?.[hIdx] ?? null;
 
                   const settled = ui.showResult && ui.phase === "settled";
-                  // A hand of exactly two cards worth 21 is a NATURAL
-                  // blackjack: it wears its own gold state — deliberately
-                  // different from the win green, the push orange and the
-                  // loss red — on the cards AND on the total pill.
-                  const isNatural21 = hand.length === 2 && handTotalUi(hand) === 21;
+                  // The turn indicator exists ONLY for split hands — a normal
+                  // single hand never wears it — and only on the hand whose
+                  // turn it is. It is the plain result-state treatment (the
+                  // same outline + pill fill win/loss/push use) in light
+                  // blue: no glow, no pill text, nothing else.
+                  const isActiveHand = (ui.playerHands?.length ?? 1) > 1
+                    && hIdx === (ui.activeHandDisplay ?? ui.activeHandIndex ?? 0)
+                    && ui.phase === "playerTurn"
+                    && !ui.settled;
+                  // A natural 21 settles with the STANDARD win treatment —
+                  // green outline + green pill, exactly like every other win.
                   const outline = settled
                     ? outcome === "win"
-                      ? (isNatural21 ? "blackjack" : "win")
+                      ? "win"
                       : outcome === "lose"
                         ? "lose"
                         : outcome === "push"
                           ? "push"
                           : "none"
-                    : "none";
+                    : isActiveHand
+                      ? "active"
+                      : "none";
 
                   const pillTone = settled
                     ? outcome === "win"
-                      ? (isNatural21 ? styles.totalBlackjack : styles.totalWin)
+                      ? styles.totalWin
                       : outcome === "lose"
                         ? styles.totalLose
                         : outcome === "push"
                           ? styles.totalPush
                           : ""
-                    : "";
+                    : isActiveHand
+                      ? styles.totalActive
+                      : "";
 
                   const fanGeom = dealGeom?.fansBottom?.[hIdx] ?? dealGeom?.fansBottom?.[0] ?? null;
                   const count = handCount(hIdx, hand.length);
                   const y0Of = playerY0(fanGeom?.h);
                   const lay = handLayout(cardGeom, fanGeom, count, y0Of(count));
-                  const isActiveHand = hIdx === ui.activeHandIndex && ui.phase === "playerTurn" && !ui.settled;
 
                   return (
                     <div
                       key={hIdx}
-                      className={`${styles.handWrap} ${isActiveHand ? styles.handWrapActive : ""}`}
+                      className={styles.handWrap}
                       aria-current={isActiveHand ? "step" : undefined}
                     >
                       <div className={styles.fanBottom} ref={(el) => { fanBottomRefs.current[hIdx] = el; }}>
@@ -1553,7 +1625,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                         {ui.roundId && shown > 0 ? (
                           <div
                             data-hand-total-index={hIdx}
-                            className={`${styles.totalPillPlayer} ${pillTone} ${isActiveHand ? styles.totalActive : ""} ${exiting ? styles.totalOut : ""} ${splitMotion.totalMoves[hIdx] ? styles.totalSplitMove : ""}`}
+                            className={`${styles.totalPillPlayer} ${pillTone} ${exiting ? styles.totalOut : ""} ${splitMotion.totalMoves[hIdx] ? styles.totalSplitMove : ""}`}
                             style={{
                               right: `${lay.labelRight}px`,
                               bottom: `${lay.labelBottom}px`,
@@ -1675,7 +1747,7 @@ function Card({ index, x = 0, y = 0, card, motionId, splitMove = null, hidden, o
               : undefined}
       >
         <div
-          className={`${styles.card} ${hidden ? styles.cardNoClip : ""} ${outline === "blackjack" ? styles.cardOutlineBlackjack : outline === "win" ? styles.cardOutlineWin : outline === "lose" ? styles.cardOutlineLose : outline === "push" ? styles.cardOutlinePush : ""
+          className={`${styles.card} ${hidden ? styles.cardNoClip : ""} ${outline === "active" ? styles.cardOutlineActive : outline === "win" ? styles.cardOutlineWin : outline === "lose" ? styles.cardOutlineLose : outline === "push" ? styles.cardOutlinePush : ""
             }`}
         >
           {showFlip ? (

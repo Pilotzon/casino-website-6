@@ -407,6 +407,11 @@
 
 .statBox {
   flex: 1;
+  /* flex column so the input row can bottom-align (margin-top: auto) —
+     a wrapped statHeader must not push this box's ±/swap buttons below
+     the neighbouring boxes' controls */
+  display: flex;
+  flex-direction: column;
 }
 
 .statHeader {
@@ -428,6 +433,11 @@
   padding: 0 0 0 12px; /* the stepper sits flush on the right edge */
   overflow: hidden;
   transition: border-color 0.2s;
+  /* Wrap-proof alignment: when one statHeader wraps to two lines, every
+     control row in the panel bottom-aligns — the wrapped label shifts all
+     ±/swap buttons down by exactly the wrap height together, so they stay
+     vertically aligned with each other. */
+  margin-top: auto;
 }
 
 .statInput.editable:focus-within {
