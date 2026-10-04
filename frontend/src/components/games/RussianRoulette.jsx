@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarBetButton, SidebarReadOnlyField, SidebarModeToggle } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -23,7 +25,6 @@ import playerGreen from "../../assets/russian-roulette/PlayerGreen.png";
 import playerBlue from "../../assets/russian-roulette/PlayerBlue.png";
 import playerPurple from "../../assets/russian-roulette/PlayerPurple.png";
 import playerYellow from "../../assets/russian-roulette/PlayerYellow.png";
-import CurrencyIcon from "../common/CurrencyIcon";
 
 const PLAYERS = 5;
 const USER_INDEX = 2;
@@ -566,117 +567,67 @@ export default function RussianRoulette({ gameRow }) {
   return (
     <div className={limboStyles.container}>
       <div className={limboStyles.sidebar}>
-        <div className={limboStyles.modeToggle}>
-          <button className={`${limboStyles.modeBtn} ${limboStyles.active}`}>Manual</button>
-          <button className={`${limboStyles.modeBtn} sidebar-mode-auto-disabled`} disabled>
-            Auto
-          </button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={limboStyles.controlGroup}>
-          <div className={limboStyles.labelRow}>
-            <span>Bet (Land on me)</span>
-            <span>$0.00</span>
-          </div>
-          <div className={limboStyles.inputGroup}>
-            <div className={limboStyles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betLand}
-                onChange={(e) => setBetLand(e.target.value)}
-                step="0.00000001"
-                disabled={isLocked || busy}
-              />
-              <CurrencyIcon className={limboStyles.btcIcon} />
-            </div>
-            <div className={limboStyles.splitButtons}>
-              <button onClick={() => adjustBet(setBetLand, 0.5, betLand)} disabled={isLocked || busy}>
-                ½
-              </button>
-              <div className={limboStyles.divider}></div>
-              <button onClick={() => adjustBet(setBetLand, 2, betLand)} disabled={isLocked || busy}>
-                2×
-              </button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
+        <BetAmountField
+          label="Bet (Land on me)"
+          meta="$0.00"
+          value={betLand}
+          onChange={(e) => setBetLand(e.target.value)}
+          onHalf={() => adjustBet(setBetLand, 0.5, betLand)}
+          onDouble={() => adjustBet(setBetLand, 2, betLand)}
+          disabled={isLocked || busy}
+          quickAdjustDisabled={isLocked || busy}
+          errors={[betLockedError, betError]}
+        />
 
         <span className="ui-bet-wrap">
-          <button className={limboStyles.betButton} onClick={startRound} disabled={isLocked || busy} data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>
+          <SidebarBetButton
+            onClick={startRound}
+            disabled={isLocked || busy}
+            data-bet-sound="true"
+            title={isLocked ? betErrorMessage : undefined}
+          >
             {phase === "phase1_spinning" ? "Spinning..." : "Bet"}
-          </button>
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
         <div className={limboStyles.controlGroup} style={{ marginTop: 10 }}>
-          <div className={limboStyles.labelRow}>
-            <span>Bet (Will I be shot)</span>
-            <span className={styles.smallMuted}>
-              {!landedOnUser ? "Locked" : bulletsThisRound >= 6 ? "Disabled at 6 bullets" : "Unlocked"}
-            </span>
-          </div>
-
-          <div className={limboStyles.inputGroup}>
-            <div className={limboStyles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betShot}
-                onChange={(e) => setBetShot(e.target.value)}
-                step="0.00000001"
-                disabled={showShotBetDisabled || busy}
-              />
-              <CurrencyIcon className={limboStyles.btcIcon} />
-            </div>
-            <div className={limboStyles.splitButtons}>
-              <button
-                onClick={() => adjustBet(setBetShot, 0.5, betShot)}
-                disabled={showShotBetDisabled || busy}
-              >
-                ½
-              </button>
-              <div className={limboStyles.divider}></div>
-              <button
-                onClick={() => adjustBet(setBetShot, 2, betShot)}
-                disabled={showShotBetDisabled || busy}
-              >
-                2×
-              </button>
-            </div>
-          </div>
-
-          <button
-            className={limboStyles.betButton}
+          <BetAmountField
+            label="Bet (Will I be shot)"
+            meta={!landedOnUser ? "Locked" : bulletsThisRound >= 6 ? "Disabled at 6 bullets" : "Unlocked"}
+            value={betShot}
+            onChange={(e) => setBetShot(e.target.value)}
+            onHalf={() => adjustBet(setBetShot, 0.5, betShot)}
+            onDouble={() => adjustBet(setBetShot, 2, betShot)}
+            disabled={showShotBetDisabled || busy}
+          />
+          <SidebarBetButton
             onClick={placeShotBet}
             data-bet-sound="true"
             disabled={isLocked || !canBet2 || busy}
             style={{ marginTop: 12 }}
-           title={isLocked ? betErrorMessage : undefined}>
+            title={isLocked ? betErrorMessage : undefined}
+          >
             Place Shot Bet
-          </button>
+          </SidebarBetButton>
         </div>
 
-        {/* Bullets this bet — standard sidebar label + readonly input,
-            same treatment as every other sidebar field */}
-        <div className={limboStyles.controlGroup}>
-          <div className={limboStyles.labelRow}>
-            <span>Bullets this bet</span>
-          </div>
-          <div className={limboStyles.readonlyInput}>
-            <input type="text" value={`${bulletsThisRound}/6`} readOnly />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label="Bullets this bet"
+          value={`${bulletsThisRound}/6`}
+        />
 
         {/* Continue + Shoot — sidebar side-buttons, one row (Coin Flip
             pattern). Shoot uses the shared blue primary variant. */}
         <div className={styles.actionRow}>
-          <button className={styles.btnGhost} onClick={continueToPhase2} disabled={!canContinue || busy}>
+          <SidebarBetButton variant="secondary" onClick={continueToPhase2} disabled={!canContinue || busy}>
             Continue
-          </button>
-          <button className={styles.btnGo} onClick={resolveShot} disabled={!canShoot || busy}>
+          </SidebarBetButton>
+          <SidebarBetButton onClick={resolveShot} disabled={!canShoot || busy}>
             Shoot
-          </button>
+          </SidebarBetButton>
         </div>
       </div>
 
@@ -688,11 +639,7 @@ export default function RussianRoulette({ gameRow }) {
         {/* Win popup — direct child of the stage (outside the scaled
             scene) so it is always dead-centred at full size. */}
         {winPopup && (
-          <div className={styles.winPopup} role="status" aria-live="polite">
-            <div className={styles.winPopupMult}>{Number(winPopup.mult || 0).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{Number(winPopup.amount).toFixed(2)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={winPopup.mult || 0} amount={winPopup.amount} />
         )}
 
         <div className={styles.sceneWrap} ref={sceneWrapRef}>

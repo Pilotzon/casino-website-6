@@ -57,11 +57,6 @@
 .modeToggle {
   composes: sidebar-mode-toggle from global;
 }
-
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-
 .active {
   composes: sidebar-mode-active from global;
 }
@@ -73,50 +68,10 @@
 .labelRow {
   composes: sidebar-label-row from global;
 }
-
-.inputGroup {
-  composes: sidebar-input-group from global;
-}
-
-/* Snakes-specific inline prefix inside the bet input */
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-  /* $ suffix like every other game */
-}
-
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-
-.divider {
-  composes: sidebar-divider from global;
-}
-
-.readonlyInput {
-  composes: sidebar-readonly-input from global;
-}
-
 /* Chevron — the shared selector caret (global.css) */
 .hasCaret {
   composes: ui-select-caret from global;
 }
-
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
-.rollButton {
-  composes: sidebar-secondary-button from global;
-}
-
-.cashoutButton {
-  composes: sidebar-secondary-button from global;
-}
-
 /* position:relative — the win/loss popups overlay the board dead-centre */
 .gameStage {
   flex: 1;
@@ -672,15 +627,6 @@
       0 14px 8px rgba(0, 0, 0, 0.25);
   }
 }
-
-/* Difficulty dropdown (inside the shared readonly input) */
-.select {
-  width: 100%;
-  height: 100%;
-  cursor: pointer;
-  padding-right: 24px;
-}
-
 /* Dice roll animation */
 .dieRolling {
   animation: snakesDiceShake 0.4s linear infinite;
@@ -768,30 +714,6 @@
   composes: ui-hover-boxes from global;
 }
 
-.wheelHoverBox {
-  composes: ui-hover-box from global;
-}
-
-.wheelHoverLabel {
-  composes: ui-hover-label from global;
-}
-
-.wheelHoverField {
-  composes: ui-hover-field from global;
-}
-
-.wheelHoverInput {
-  composes: ui-hover-input from global;
-}
-
-.wheelHoverField .wheelHoverInput {
-  padding-right: 44px;
-}
-
-.wheelHoverSuffix {
-  composes: ui-hover-suffix from global;
-}
-
 .wheelHoverArrow {
   position: relative;
   height: 0;
@@ -819,26 +741,6 @@
 }
 
 /* Win popup — shared, dead-centre overlay (global.css) */
-.winPopup {
-  composes: ui-win-popup from global;
-}
-
-.winPopupTitle {
-  composes: ui-win-popup-title from global;
-}
-
-.winPopupAmount {
-  composes: ui-win-popup-amount from global;
-}
-
-.winPopupMult {
-  composes: ui-win-popup-mult from global;
-}
-
-.winPopupDivider {
-  composes: ui-win-popup-divider from global;
-}
-
 /* Loss popup — same shared overlay, red accent (scoped border) */
 .lossPopup {
   composes: ui-win-popup from global;
@@ -865,16 +767,6 @@
 .modalOverlay {
   composes: ui-modal-overlay from global;
 }
-
-.modalCard {
-  composes: ui-modal-card from global;
-  width: 100%;
-}
-
-.modalTitle {
-  composes: ui-modal-title from global;
-}
-
 .modalGrid {
   composes: ui-modal-grid from global;
 }
@@ -949,11 +841,7 @@
   }
 
   .sidebar {
-  }
-
-  /* Popups stay true dead-centre overlays on mobile too */
-  .winPopup,
-  .lossPopup {
+  }.lossPopup{
     max-width: calc(100% - 24px);
   }
 

@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarSelectField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
+import HoverStatField from "../common/HoverStatField";
 import DisabledGameStage from "./DisabledGameStage";
 import BetError from "../common/BetError";
 import { useAuth } from "../../context/AuthContext";
@@ -938,79 +941,46 @@ export default function Snakes({ gameRow }) {
       <audio ref={multUpAudioRef} src={multUpSound} preload="auto" />
 
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`} type="button">
-            Manual
-          </button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>
-            Auto
-          </button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => setBetAmount((bet * 0.5).toFixed(2))}
+          onDouble={() => setBetAmount((bet * 2).toFixed(2))}
+          step="0.01"
+          min={0}
+          disabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)}
+          quickAdjustDisabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)}
+          errors={[betLockedError, betError]}
+        />
 
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.01"
-                min="0"
-                disabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)}
-              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => setBetAmount((bet * 0.5).toFixed(2))} disabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)} type="button">
-                ½
-              </button>
-              <div className={styles.divider} />
-              <button onClick={() => setBetAmount((bet * 2).toFixed(2))} disabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)} type="button">
-                2×
-              </button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Difficulty</span>
-          </div>
-          <div className={`${styles.readonlyInput} ${styles.hasCaret}`}>
-            <select
-              className={styles.select}
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-              disabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)}
-            >
-              {DIFFS.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <SidebarSelectField
+          label="Difficulty"
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value)}
+          disabled={isLocked || isBusy || (status === "in_progress" && !landedOnSnake && !hasWon)}
+          options={DIFFS.map((d) => ({ value: d.value, label: d.label }))}
+        />
 
         <span className="ui-bet-wrap">
-          <button className={styles.betButton} onClick={start} disabled={isLocked || !canBet} type="button" data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>
-          Bet
-          </button>
+          <SidebarBetButton
+            onClick={start}
+            disabled={isLocked || !canBet}
+            data-bet-sound="true"
+            title={isLocked ? betErrorMessage : undefined}
+          >
+            Bet
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
         {!landedOnSnake && !hasWon && (
-          <button className={styles.rollButton} onClick={roll} disabled={!canRoll} type="button">
+          <SidebarBetButton variant="secondary" onClick={roll} disabled={!canRoll}>
             Roll
-          </button>
+          </SidebarBetButton>
         )}
 
         {status === "in_progress" && !landedOnSnake && !hasWon && (
@@ -1020,9 +990,9 @@ export default function Snakes({ gameRow }) {
               <span>${fmt2(totalPayoutAccrued)}</span>
             </div>
 
-            <button className={styles.cashoutButton} onClick={cashout} disabled={!canCashout} type="button">
+            <SidebarBetButton variant="secondary" onClick={cashout} disabled={!canCashout}>
               Cashout
-            </button>
+            </SidebarBetButton>
           </div>
         )}
       </div>
@@ -1035,11 +1005,7 @@ export default function Snakes({ gameRow }) {
         {/* Win / loss popups — direct children of the stage so they are
             always dead-centred over the board as true overlays. */}
         {showWinPopup && winAmount > 0 && (
-          <div className={styles.winPopup} role="status" aria-live="polite">
-            <div className={styles.winPopupMult}>{Number(winMult || 0).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{fmt2(winAmount)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={winMult || 0} amountText={fmt2(winAmount)} />
         )}
 
         {showLossPopup && (
@@ -1100,29 +1066,12 @@ export default function Snakes({ gameRow }) {
                 style={panelMeta.style}
               >
                 <div className={styles.wheelHoverBoxes} style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-                  <div className={styles.wheelHoverBox}>
-                    <div className={styles.wheelHoverLabel}>Profit on Win</div>
-                    <div className={styles.wheelHoverField}>
-                      <input
-                        className={styles.wheelHoverInput}
-                        type="text"
-                        readOnly
-                        value={fmt2(hoverInfo.profit)}
-                      />
-                      <span className={styles.wheelHoverSuffix}><CurrencyIcon /></span>
-                    </div>
-                  </div>
-                  <div className={styles.wheelHoverBox}>
-                    <div className={styles.wheelHoverLabel}>Chance</div>
-                    <div className={styles.wheelHoverField}>
-                      <input
-                        className={styles.wheelHoverInput}
-                        type="text"
-                        readOnly
-                        value={`${hoverInfo.ways}/36`}
-                      />
-                    </div>
-                  </div>
+                  <HoverStatField
+                    label="Profit on Win"
+                    value={fmt2(hoverInfo.profit)}
+                    suffix={<CurrencyIcon />}
+                  />
+                  <HoverStatField label="Chance" value={`${hoverInfo.ways}/36`} />
                 </div>
                 <div className={styles.wheelHoverArrow} />
               </div>

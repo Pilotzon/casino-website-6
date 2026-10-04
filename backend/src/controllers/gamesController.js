@@ -244,7 +244,7 @@ class GamesController {
 
       const { roundId, action, handIndex } = req.body;
 
-      if (!["hit", "stand", "double", "split"].includes(action)) {
+      if (!["hit", "stand", "double", "split", "insurance", "decline_insurance"].includes(action)) {
         return res.status(400).json({ success: false, message: "Invalid action" });
       }
 

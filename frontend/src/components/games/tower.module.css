@@ -70,53 +70,9 @@
    ========================================================= */
 .controlsHeader {
   margin-bottom: 4px;
-}
-
-.modeToggle {
-  composes: sidebar-mode-toggle from global;
-}
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-.active {
+}.active {
   composes: sidebar-mode-active from global;
 }
-
-.controlGroup {
-  composes: sidebar-control-group from global;
-}
-.labelRow {
-  composes: sidebar-label-row from global;
-}
-
-.inputGroup {
-  composes: sidebar-input-group from global;
-}
-.readonlyInput {
-  composes: sidebar-readonly-input from global;
-}
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-  margin-right: 0;
-  margin-left: 12px;
-}
-
-.inputWrapper .btcIcon {
-  margin-left: 0;
-  margin-right: 12px;
-}
-
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-.divider {
-  composes: sidebar-divider from global;
-}
-
 /* Raw <select> — the shared caret class adds appearance:none, the
    right-side chevron and its padding (global.css) */
 .select {
@@ -130,15 +86,6 @@
   color: var(--sidebar-input-text);
   font-weight: 700;
 }
-
-.profitInput {
-  background: var(--color-bg-input-profit); /* #141f28 — Total Profit field */
-}
-
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
 /* =========================================================
    Stage / Art layers
    ========================================================= */
@@ -184,26 +131,6 @@
 
 /* ✅ Win popup — shared, dead-centre overlay (global.css);
    scoped rule keeps Tower's signature border colour. */
-.winPopup {
-  composes: ui-win-popup from global;
-}
-
-.winPopupTitle {
-  composes: ui-win-popup-title from global;
-}
-
-.winPopupAmount {
-  composes: ui-win-popup-amount from global;
-}
-
-.winPopupMult {
-  composes: ui-win-popup-mult from global;
-}
-
-.winPopupDivider {
-  composes: ui-win-popup-divider from global;
-}
-
 /* Dragon */
 .dragonHeadInFrontOfCastle,
 .dragonWingsBehindEverything {

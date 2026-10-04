@@ -42,78 +42,8 @@
 .modeToggle {
   composes: sidebar-mode-toggle from global;
 }
-
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-
-.active {
-  composes: sidebar-mode-active from global;
-}
-
-.controlGroup {
-  composes: sidebar-control-group from global;
-}
-
-.labelRow {
-  composes: sidebar-label-row from global;
-}
-
-.inputGroup {
-  composes: sidebar-input-group from global;
-}
-
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-}
-
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-
-.divider {
-  composes: sidebar-divider from global;
-}
-
-.readonlyInput {
-  composes: sidebar-readonly-input from global;
-}
-
-.profitInput {
-  background: var(--color-bg-input-profit);
-  /* #141f28 — Total Profit field */
-}
-
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
 /* ✅ Win popup — shared, dead-centre overlay (global.css).
    Flip adds nothing: the stage already is position:relative. */
-.winPopup {
-  composes: ui-win-popup from global;
-}
-
-.winPopupTitle {
-  composes: ui-win-popup-title from global;
-}
-
-.winPopupAmount {
-  composes: ui-win-popup-amount from global;
-}
-
-.winPopupMult {
-  composes: ui-win-popup-mult from global;
-}
-
-.winPopupDivider {
-  composes: ui-win-popup-divider from global;
-}
-
 /* Random Pick — unified secondary button (defined once in global.css) */
 .randomButton {
   composes: sidebar-secondary-button from global;
@@ -134,50 +64,11 @@
   flex: 1;
   justify-content: space-between;
 }
-
-/* Active: recolor only — zero layout shift */
-.activeSide {
-  composes: ui-action-active from global;
-}
-
 /* Disabled side buttons: Blackjack's exact disabled treatment (global
    .ui-action-button) plus the restored brightness() dimming, so an
    unpickable side reads clearly darker — fill, text and marker alike. */
 .sideBtn:disabled {
   filter: brightness(0.7);
-}
-
-.textSide {
-  font-weight: 700;
-  color: var(--color-text-primary);
-  font-size: var(--font-size-control);
-  font-family: 'proxima-nova';
-  font-feature-settings: "salt" on;
-  ;
-}
-
-.activeSide .textSide {
-  color: var(--color-text-primary);
-}
-
-/* side markers: always visibly coloured (same language as the history
-   strip — gold round = heads, blue diamond = tails). The diamond is 10px
-   so its rotated footprint (≈14px) matches the 14px circle — both buttons
-   keep identical vertical rhythm. */
-.dotHeads {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fca311;
-  flex: 0 0 auto;
-}
-
-.dotTails {
-  width: 10px;
-  height: 10px;
-  background: #3b82f6;
-  transform: rotate(45deg);
-  flex: 0 0 auto;
 }
 
 .gameStage {

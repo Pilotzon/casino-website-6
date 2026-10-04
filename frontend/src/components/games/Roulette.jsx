@@ -3,6 +3,8 @@
 // ============================================================
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -26,7 +28,6 @@ import chip500 from "../../assets/roulette/Chip500.png";
 import chip1000 from "../../assets/roulette/Chip1000.png";
 import chip5000 from "../../assets/roulette/Chip5000.png";
 import chip10000 from "../../assets/roulette/Chip10000.png";
-import CurrencyIcon from "../common/CurrencyIcon";
 import { IconCaretLeft, IconCaretRight, IconUndo, IconX } from "../common/Icons";
 
 // ============================================================
@@ -715,10 +716,7 @@ export default function Roulette({ gameRow }) {
 
       {/* ==================== SIDEBAR ==================== */}
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`}>Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
         <div className={styles.controlGroup}>
           <div className={styles.labelRow}>
@@ -756,28 +754,22 @@ export default function Roulette({ gameRow }) {
             <BetError message={betError} />
         </div>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Total Bet</span>
-            <span>${totalBet.toFixed(2)}</span>
-          </div>
-          <div className={styles.betInputRow}>
-            <div className={styles.betInputLike}>
-              {totalBet.toFixed(2)}
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-            <div className={styles.splitButtons}>
-              <button type="button" disabled>½</button>
-              <div className={styles.divider} />
-              <button type="button" disabled>2×</button>
-            </div>
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label="Total Bet"
+          meta={`$${totalBet.toFixed(2)}`}
+          value={totalBet.toFixed(2)}
+          currency
+        />
 
         <span className="ui-bet-wrap">
-          <button className={styles.betButton} onClick={isMobile ? handleMobileBet : handleBet} disabled={isLocked || spinning} data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>
-          Bet
-          </button>
+          <SidebarBetButton
+            onClick={isMobile ? handleMobileBet : handleBet}
+            disabled={isLocked || spinning}
+            data-bet-sound="true"
+            title={isLocked ? betErrorMessage : undefined}
+          >
+            Bet
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
       </div>
@@ -790,11 +782,10 @@ export default function Roulette({ gameRow }) {
           <>
         {/* Win popup — direct child of the stage, dead-centre overlay */}
         {showWinPopup && (
-          <div className={styles.winPopup}>
-            <div className={styles.winPopupMult}>{(totalBet > 0 ? Number(lastPayout) / totalBet : 0).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{Number(lastPayout).toFixed(2)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup
+            multiplier={totalBet > 0 ? Number(lastPayout) / totalBet : 0}
+            amount={Number(lastPayout)}
+          />
         )}
 
         <div className={styles.stageCard}>

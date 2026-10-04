@@ -64,6 +64,12 @@ class Round {
     return this.findById(id);
   }
 
+  /** Update the total committed stake once a blackjack round adds doubles, splits, or insurance. */
+  static updateBetAmount(id, betAmount) {
+    db.prepare("UPDATE rounds SET bet_amount = ? WHERE id = ?").run(betAmount, id);
+    return this.findById(id);
+  }
+
   /**
    * Update payout/multiplier/outcome (optional helper)
    */

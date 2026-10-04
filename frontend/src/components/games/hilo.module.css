@@ -38,51 +38,6 @@
 .modeToggle {
   composes: sidebar-mode-toggle from global;
 }
-
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-
-.active {
-  composes: sidebar-mode-active from global;
-}
-
-.controlGroup {
-  composes: sidebar-control-group from global;
-}
-
-.labelRow {
-  composes: sidebar-label-row from global;
-}
-
-.inputGroup {
-  composes: sidebar-input-group from global;
-}
-
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-}
-
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-
-.divider {
-  composes: sidebar-divider from global;
-}
-
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
-.readonlyInput {
-  composes: sidebar-readonly-input from global;
-}
-
 /* ===== Stage (placeholder — the real board replaces this) ===== */
 .gameStage {
   flex: 1;

@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { BetAmountField, SidebarSelectField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
+import HoverStatField from "../common/HoverStatField";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -672,80 +674,44 @@ function Plinko({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`}>Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          errors={[betLockedError, betError]}
+        />
 
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-                              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
+        <SidebarSelectField
+          label="Risk"
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value)}
+          options={[
+            { value: "low", label: "Low" },
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High" },
+          ]}
+        />
 
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)}>
-                ½
-              </button>
-              <div className={styles.divider} />
-              <button onClick={() => adjustBet(2)}>
-                2×
-              </button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Risk</span>
-          </div>
-          <div className={`${styles.readonlyInput} ${styles.hasCaret}`}>
-            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </div>
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Rows</span>
-          </div>
-          <div className={`${styles.readonlyInput} ${styles.hasCaret}`}>
-            <select
-              value={rows}
-              onChange={(e) => setRows(parseInt(e.target.value, 10))}
-                          >
-              {[8, 9, 10, 11, 12, 13, 14, 15, 16].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <SidebarSelectField
+          label="Rows"
+          value={rows}
+          onChange={(e) => setRows(parseInt(e.target.value, 10))}
+          options={[8, 9, 10, 11, 12, 13, 14, 15, 16].map((r) => ({ value: r, label: r }))}
+        />
 
         <span className="ui-bet-wrap">
-          <button className={styles.betButton} disabled={isLocked || bet <= 0}
+          <SidebarBetButton
             onClick={handleDrop}
             data-bet-sound="true"
+            disabled={isLocked || bet <= 0}
             title={isLocked ? betErrorMessage : undefined}>
           Bet
-          </button>
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
       </div>
@@ -804,42 +770,21 @@ function Plinko({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
                     className={`${styles.bucketHoverPanel} ${desktopHoverActive ? styles.bucketHoverPanelVisible : ""}`}
                   >
                     <div className={styles.bucketHoverBoxes}>
-                      <div className={styles.bucketHoverBox}>
-                        <div className={styles.bucketHoverLabel}>Payout</div>
-                        <div className={styles.bucketHoverField}>
-                          <input
-                            className={styles.bucketHoverInput}
-                            type="text"
-                            readOnly
-                            value={(hoverInfo ? hoverInfo.multiplier : 0).toFixed(2)}
-                          />
-                          <span className={styles.bucketHoverSuffix}>×</span>
-                        </div>
-                      </div>
-                      <div className={styles.bucketHoverBox}>
-                        <div className={styles.bucketHoverLabel}>Profit on Win</div>
-                        <div className={styles.bucketHoverField}>
-                          <input
-                            className={styles.bucketHoverInput}
-                            type="text"
-                            readOnly
-                            value={format8(hoverInfo ? hoverInfo.profit : 0)}
-                          />
-                          <span className={styles.bucketHoverSuffix}><CurrencyIcon /></span>
-                        </div>
-                      </div>
-                      <div className={styles.bucketHoverBox}>
-                        <div className={styles.bucketHoverLabel}>Chance</div>
-                        <div className={styles.bucketHoverField}>
-                          <input
-                            className={styles.bucketHoverInput}
-                            type="text"
-                            readOnly
-                            value={hoverInfo ? hoverInfo.chance.toFixed(9) : "0.000000000"}
-                          />
-                          <span className={styles.bucketHoverSuffix}>%</span>
-                        </div>
-                      </div>
+                      <HoverStatField
+                        label="Payout"
+                        value={(hoverInfo ? hoverInfo.multiplier : 0).toFixed(2)}
+                        suffix="×"
+                      />
+                      <HoverStatField
+                        label="Profit on Win"
+                        value={format8(hoverInfo ? hoverInfo.profit : 0)}
+                        suffix={<CurrencyIcon />}
+                      />
+                      <HoverStatField
+                        label="Chance"
+                        value={hoverInfo ? hoverInfo.chance.toFixed(9) : "0.000000000"}
+                        suffix="%"
+                      />
                     </div>
                     <div
                       className={styles.bucketHoverArrow}

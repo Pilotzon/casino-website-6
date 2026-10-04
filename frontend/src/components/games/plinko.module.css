@@ -35,10 +35,6 @@
   gap: var(--sidebar-group-gap); /* group rhythm (global) */
   border-right: 1px solid var(--color-divider-panel); /* sidebar/game divider #253241 */
 }
-
-
-.controlsHeader { margin-bottom: 4px; }
-
 /* =========================================================
    Sidebar controls — shared styling lives in styles/global.css
    (composed here so every game matches). Plinko-specific tweaks
@@ -46,51 +42,15 @@
    ========================================================= */
 .modeToggle {
   composes: sidebar-mode-toggle from global;
-}
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-.modeBtn.active {
+}.modeBtn.active {
   background: var(--sidebar-mode-active-bg);
   color: var(--sidebar-mode-active-color);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
-
-.controlGroup {
-  composes: sidebar-control-group from global;
-}
-.labelRow {
-  composes: sidebar-label-row from global;
-}
-
-.inputGroup {
-  composes: sidebar-input-group from global;
-}
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-}
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-.divider {
-  composes: sidebar-divider from global;
-}
-.readonlyInput {
-  composes: sidebar-readonly-input from global;
-}
-
 /* Chevron — the shared selector caret (global.css) */
 .hasCaret {
   composes: ui-select-caret from global;
 }
-
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
 /* Stage */
 .gameStage {
   flex: 1;
@@ -241,30 +201,6 @@
   composes: ui-hover-boxes from global;
 }
 
-.bucketHoverBox {
-  composes: ui-hover-box from global;
-}
-
-.bucketHoverLabel {
-  composes: ui-hover-label from global;
-}
-
-.bucketHoverField {
-  composes: ui-hover-field from global;
-}
-
-.bucketHoverInput {
-  composes: ui-hover-input from global;
-}
-
-.bucketHoverField .bucketHoverInput {
-  padding-right: 44px;
-}
-
-.bucketHoverSuffix {
-  composes: ui-hover-suffix from global;
-}
-
 .bucketHoverArrow {
   position: relative;
   height: 0;
@@ -285,16 +221,6 @@
 .bucketModalOverlay {
   composes: ui-modal-overlay from global;
 }
-
-.bucketModalCard {
-  composes: ui-modal-card from global;
-  width: 100%;
-}
-
-.bucketModalTitle {
-  composes: ui-modal-title from global;
-}
-
 .bucketModalNumber {
   composes: ui-modal-number from global;
 }
@@ -409,29 +335,6 @@
   z-index: 50;
   pointer-events: none;
 }
-
-/* ===== Mobile blocker ===== */
-.mobileBlocker {
-  width: min(980px, 100%);
-  height: min(78vh, 760px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.55);
-  border-radius: 18px;
-}
-
-.mobileBlockerCard {
-  background: var(--color-btn-secondary-bg); /* #3E586C, no border */
-  border: none;
-  color: var(--color-text-primary);
-  padding: 16px 18px;
-  border-radius: 12px;
-  font-weight: 800;
-  text-align: center;
-  max-width: 320px;
-}
-
 /* Responsive */
 @media (max-width: 900px) {
   .container { flex-direction: column; }

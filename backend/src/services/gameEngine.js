@@ -685,8 +685,15 @@ static async blackjackAction(roundId, action, handIndex = 0) {
 
   const userId = round.user_id;
 
-  if (!["hit", "stand", "double", "split"].includes(action)) {
+  if (!["hit", "stand", "double", "split", "insurance", "decline_insurance"].includes(action)) {
     throw new Error("Invalid action");
+  }
+  if (gs.insurancePending && !["insurance", "decline_insurance"].includes(action)) {
+    throw new Error("Choose insurance before playing the hand");
+  }
+
+  if (action === "insurance" || action === "decline_insurance") {
+    return GameEngine.blackjackInsurance(userId, roundId, action === "insurance");
   }
 
   if (action === "hit") return GameEngine.blackjackHit(userId, roundId, handIndex);
@@ -739,6 +746,9 @@ static async processBlackjack(userId, betAmount) {
       baseBet: bet,
       status: "player_turn", // player_turn | finished
       activeHandIndex: 0,
+      insurancePending: false,
+      insuranceBet: 0,
+      insurancePayout: 0,
       hands: [
         {
           hand: playerHand,
@@ -755,6 +765,44 @@ static async processBlackjack(userId, betAmount) {
 
     const playerBJ = isBlackjack(playerHand);
     const dealerBJ = isBlackjack(dealerHand);
+
+    // An Ace upcard opens a server-validated insurance decision before the
+    // dealer's hole card is revealed, including when either side has a natural.
+    if (bjRank(dealerHand[0]) === "A") {
+      gameState.insurancePending = true;
+      const round = Round.create({
+        userId,
+        gameId: game.id,
+        betAmount: bet,
+        payoutAmount: 0,
+        multiplier: 0,
+        outcome: { status: "insurance_pending" },
+        gameState,
+      });
+
+      return {
+        success: true,
+        round,
+        gameState: {
+          roundId: round.id,
+          status: "player_turn",
+          activeHandIndex: 0,
+          playerHands: [normalizeHand(playerHand)],
+          dealerHand: [normalizeCard(dealerHand[0]), { hidden: true }],
+          handTotals: [playerTotal],
+          handBets: [bet],
+          handOutcomes: [null],
+          payout: 0,
+          balance: balanceAfterBet,
+          baseBet: bet,
+          insurancePending: true,
+          insuranceBet: 0,
+          insurancePayout: 0,
+          dealerTotal,
+          dealerShownTotal,
+        },
+      };
+    }
 
     if (playerBJ || dealerBJ) {
       gameState.status = "finished";
@@ -809,6 +857,10 @@ static async processBlackjack(userId, betAmount) {
           handOutcomes: [gameState.hands[0].outcome],
           payout: payoutAmount,
           balance: newBalance,
+          baseBet: bet,
+          insurancePending: false,
+          insuranceBet: 0,
+          insurancePayout: 0,
           dealerTotal,
           dealerShownTotal: dealerTotal,
         },
@@ -839,6 +891,10 @@ static async processBlackjack(userId, betAmount) {
         handOutcomes: [null],
         payout: 0,
         balance: balanceAfterBet,
+        baseBet: bet,
+        insurancePending: false,
+        insuranceBet: 0,
+        insurancePayout: 0,
         dealerTotal,
         dealerShownTotal,
         balanceAfterBet,
@@ -849,6 +905,88 @@ static async processBlackjack(userId, betAmount) {
     throw error;
   }
 }
+static async blackjackInsurance(userId, roundId, acceptInsurance) {
+  const round = Round.findById(roundId);
+  if (!round) throw new Error("Round not found");
+  if (round.user_id !== userId) throw new Error("Unauthorized");
+
+  const gs = round.game_state;
+  if (!gs || gs.status !== "player_turn" || !gs.insurancePending) {
+    throw new Error("Insurance is not available");
+  }
+
+  const baseBet = Number(gs.baseBet ?? gs.hands?.[0]?.bet ?? round.bet_amount);
+  if (!Number.isFinite(baseBet) || baseBet <= 0) throw new Error("Invalid bet");
+  const insuranceBet = acceptInsurance ? formatNumber(baseBet / 2, 8) : 0;
+
+  if (acceptInsurance) {
+    const balance = Number(User.findById(userId)?.balance ?? 0);
+    if (insuranceBet > balance) throw new Error("Insufficient balance for insurance");
+    User.updateBalance(userId, -insuranceBet, "Blackjack insurance bet");
+  }
+
+  const dealerBlackjack = isBlackjack(gs.dealerHand || []);
+  const playerBlackjack = isBlackjack(gs.hands?.[0]?.hand || []);
+  const hands = (gs.hands || []).map((hand) => ({ ...hand }));
+  let nextState = {
+    ...gs,
+    insurancePending: false,
+    insuranceBet,
+    insurancePayout: 0,
+  };
+
+  if (dealerBlackjack || playerBlackjack) {
+    let mainPayout = 0;
+    let outcome = "lose";
+    if (dealerBlackjack && playerBlackjack) {
+      mainPayout = baseBet;
+      outcome = "push";
+    } else if (playerBlackjack) {
+      mainPayout = baseBet * 2.5;
+      outcome = "win";
+    }
+
+    if (hands[0]) {
+      hands[0] = { ...hands[0], finished: true, outcome, payout: mainPayout };
+    }
+    const insurancePayout = acceptInsurance && dealerBlackjack ? insuranceBet * 3 : 0;
+    const totalPayout = mainPayout + insurancePayout;
+    const totalBet = baseBet + insuranceBet;
+    if (totalPayout > 0) User.updateBalance(userId, totalPayout, "Blackjack payout");
+
+    nextState = {
+      ...nextState,
+      status: "finished",
+      finishReason: dealerBlackjack ? "dealer_blackjack" : "player_blackjack",
+      hands,
+      insurancePayout,
+    };
+    const dealerTotal = calculateHandTotal(nextState.dealerHand || []);
+    const outcomeRecord = {
+      status: "finished",
+      dealerTotal,
+      insuranceBet,
+      insurancePayout,
+      hands: hands.map((hand) => ({
+        bet: hand.bet,
+        total: calculateHandTotal(hand.hand || []),
+        outcome: hand.outcome,
+        payout: hand.payout,
+      })),
+    };
+    Round.updateGameState(roundId, nextState);
+    Round.updateBetAmount(roundId, totalBet);
+    Round.updatePayout(roundId, totalPayout, totalBet > 0 ? formatNumber(totalPayout / totalBet, 8) : 0, outcomeRecord);
+  } else {
+    Round.updateGameState(roundId, nextState);
+    const committedBet = (nextState.hands || []).reduce((total, hand) => total + Number(hand.bet || 0), 0)
+      + Number(nextState.insuranceBet || 0);
+    if (committedBet !== Number(round.bet_amount)) Round.updateBetAmount(roundId, committedBet);
+  }
+
+  return GameEngine._bjSerialize(roundId, nextState, userId);
+}
+
 static async blackjackHit(userId, roundId, handIndex = 0) {
   const round = Round.findById(roundId);
   if (!round) throw new Error("Round not found");
@@ -909,7 +1047,7 @@ static async blackjackHit(userId, roundId, handIndex = 0) {
       };
 
       // ✅ FIX: Create final round record so history captures the result
-      const totalBet = hands.reduce((s, hand) => s + Number(hand.bet || 0), 0);
+      const totalBet = hands.reduce((s, hand) => s + Number(hand.bet || 0), 0) + Number(gs.insuranceBet || 0);
       Round.create({
         userId,
         gameId: round.game_id,
@@ -932,6 +1070,21 @@ static async blackjackHit(userId, roundId, handIndex = 0) {
       });
 
       Round.updateGameState(roundId, nextState);
+      Round.updateBetAmount(roundId, totalBet);
+      Round.updatePayout(roundId, 0, 0, {
+        status: "finished",
+        dealerTotal: calculateHandTotal(gs.dealerHand || []),
+        insuranceBet: Number(gs.insuranceBet || 0),
+        insurancePayout: Number(gs.insurancePayout || 0),
+        hands: hands.map((hand) => ({
+          bet: hand.bet,
+          total: calculateHandTotal(hand.hand || []),
+          outcome: hand.outcome,
+          payout: hand.payout,
+          doubled: hand.doubled,
+          isSplitAce: hand.isSplitAce,
+        })),
+      });
       return GameEngine._bjSerialize(roundId, nextState, userId);
     }
 
@@ -1140,16 +1293,19 @@ static _bjAdvance(gs, userId, gameId, roundId) {
   const afterDealer = GameEngine._bjDealerPlay(gs);
   const settled = GameEngine._bjSettle(afterDealer, userId);
 
-  const totalBet = settled.hands.reduce((s, h) => s + Number(h.bet || 0), 0);
-  const totalPayout = settled.hands.reduce((s, h) => s + Number(h.payout || 0), 0);
+  const totalBet = settled.hands.reduce((s, h) => s + Number(h.bet || 0), 0) + Number(settled.insuranceBet || 0);
+  const totalPayout = settled.hands.reduce((s, h) => s + Number(h.payout || 0), 0) + Number(settled.insurancePayout || 0);
   const mult = totalBet > 0 ? formatNumber(totalPayout / totalBet, 8) : 0;
 
   // ✅ FIX: Update original round so it's marked finished (prevents re-action)
   if (roundId) {
     Round.updateGameState(roundId, { ...settled, status: "finished" });
+    Round.updateBetAmount(roundId, totalBet);
     Round.updatePayout(roundId, totalPayout, mult, {
       status: "finished",
       dealerTotal: calculateHandTotal(settled.dealerHand || []),
+      insuranceBet: Number(settled.insuranceBet || 0),
+      insurancePayout: Number(settled.insurancePayout || 0),
       hands: settled.hands.map((h) => ({
         bet: h.bet,
         total: calculateHandTotal(h.hand || []),
@@ -1171,6 +1327,8 @@ static _bjAdvance(gs, userId, gameId, roundId) {
     outcome: {
       status: "finished",
       dealerTotal: calculateHandTotal(settled.dealerHand || []),
+      insuranceBet: Number(settled.insuranceBet || 0),
+      insurancePayout: Number(settled.insurancePayout || 0),
       hands: settled.hands.map((h) => ({
         bet: h.bet,
         total: calculateHandTotal(h.hand || []),
@@ -1260,7 +1418,7 @@ static _bjSerialize(roundId, gs, userId) {
 
   const payout =
     status === "finished"
-      ? gs.hands.reduce((s, h) => s + Number(h.payout || 0), 0)
+      ? gs.hands.reduce((s, h) => s + Number(h.payout || 0), 0) + Number(gs.insurancePayout || 0)
       : 0;
 
   // ✅ FIX: User.getBalance does not exist — use User.findById instead
@@ -1279,6 +1437,10 @@ static _bjSerialize(roundId, gs, userId) {
       handBets,
       handOutcomes,
       payout,
+      baseBet: Number(gs.baseBet ?? handBets[0] ?? 0),
+      insurancePending: !!gs.insurancePending,
+      insuranceBet: Number(gs.insuranceBet || 0),
+      insurancePayout: Number(gs.insurancePayout || 0),
       dealerTotal,
       dealerShownTotal,
       ...(typeof balance === "number" ? { balance } : {}),

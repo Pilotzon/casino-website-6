@@ -267,6 +267,24 @@
   /* Error states ONLY: inline bet errors + the bet-amount input's error
      border (+ page-level error banners). Never used for game losses. */
   --color-error: #FB7984;
+  --color-accent-red: #E9103C;
+  --color-success-contrast: #07210f;
+  --color-success-border: rgba(0, 231, 1, 0.9);
+  --color-history-neutral: var(--color-bg-tile);
+  --color-action-hit: #ff9d00;
+  --color-action-stand: #9000ff;
+  --color-action-heads: #fca311;
+  --color-action-tails: #3b82f6;
+  --color-blackjack-active: var(--color-accent-red);
+
+  /* Balance dropdown surfaces, borders, and loading treatment. */
+  --color-balance-dropdown-bg: var(--color-bg-shell);
+  --color-balance-dropdown-tile: var(--color-balance-box-bg);
+  --color-balance-dropdown-divider: rgba(255, 255, 255, 0.08);
+  --color-balance-dropdown-subtle: rgba(255, 255, 255, 0.05);
+  --color-balance-dropdown-subtle-hover: rgba(255, 255, 255, 0.1);
+  --color-balance-dropdown-skeleton-low: rgba(255, 255, 255, 0.06);
+  --color-balance-dropdown-skeleton-high: rgba(255, 255, 255, 0.12);
 
   /* The currency mark (CurrencyIcon: green disc, "$" cut out) — the ONE
      colour every "$" icon on the site uses. */
@@ -734,7 +752,9 @@ input[type="number"] {
 
 /* an error line right under the field paints the field's border red too */
 .sidebar-input-group:has(+ .bet-error),
-.sidebar-input-group:has(+ .bet-error):focus-within {
+.sidebar-input-group:has(+ .bet-error):focus-within,
+.sidebar-input-group--error,
+.sidebar-input-group--error:focus-within {
   border-color: var(--color-error);
 }
 
@@ -769,6 +789,8 @@ input[type="number"] {
 
 .sidebar-input-wrapper input,
 .sidebar-input-wrapper select {
+  flex: 1 1 auto;
+  min-width: 0;
   background: transparent;
   border: none;
   color: var(--sidebar-input-text);
@@ -929,10 +951,10 @@ input[type="number"] {
   background-color: var(--color-bg-panel);
 }
 
-/* A read-only display field is not an interactive control: no hover or
-   press affordance, no click caret, no text selection, no focus ring. */
+/* A read-only display field has no click/press affordance or text selection.
+   The shared readonly component opts into the same subtle hover highlight as
+   editable fields so live profit values remain easy to track. */
 .sidebar-readonly-input:has(input:read-only) {
-  pointer-events: none;
   cursor: default;
 }
 
@@ -959,6 +981,9 @@ input[type="number"] {
 
 /* ---- Bet button (primary CTA of every game sidebar) ---- */
 .sidebar-bet-button {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--bet-btn-height);
   background: var(--color-bet-btn-bg);
   /* #2377ff — exact Casino value */
   color: var(--color-text-primary);
@@ -974,6 +999,16 @@ input[type="number"] {
   font-feature-settings: "salt" on;
   transition: transform var(--bet-btn-press-duration) ease, background-color 140ms ease;
   box-shadow: var(--shadow-md);
+}
+
+/* Cashout keeps the shared CTA box and changes only its semantic fill. */
+.sidebar-bet-button--cashout {
+  background: var(--color-action-hit);
+  color: var(--color-text-primary);
+}
+
+.sidebar-bet-button--cashout:hover:not(:disabled) {
+  filter: brightness(0.92);
 }
 
 /* Hover: brightness lift only, never a scale change */
@@ -1000,6 +1035,8 @@ input[type="number"] {
 
 /* ---- Secondary sidebar button (Random Pick / roll / continue) ---- */
 .sidebar-secondary-button {
+  box-sizing: border-box;
+  min-height: var(--bet-btn-height);
   background: var(--color-btn-random-bg);
   /* #2d3b48 */
   color: var(--color-text-primary);
@@ -1050,11 +1087,14 @@ input[type="number"] {
    "active/selected" state brightens — no border added or removed,
    so state changes never shift the layout. */
 .ui-action-button {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 44px;
+  min-width: 0;
+  min-height: 44px;
+  height: auto;
   padding: 0 15px;
   background: var(--color-btn-secondary-bg);
   border-radius: 8px;
@@ -1076,6 +1116,46 @@ input[type="number"] {
 
 .ui-action-button:active:not(:disabled) {
   transform: scale(var(--ui-press-scale));
+}
+
+.ui-action-button--space-between {
+  justify-content: space-between;
+}
+
+.ui-action-button-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ui-action-button-icon {
+  display: block;
+  flex: 0 0 var(--ui-action-icon-size, 18px);
+  width: var(--ui-action-icon-size, 18px);
+  height: var(--ui-action-icon-size, 18px);
+  background-color: var(--ui-action-icon-color, currentColor);
+  -webkit-mask: var(--ui-action-mask) center / contain no-repeat;
+  mask: var(--ui-action-mask) center / contain no-repeat;
+}
+
+.ui-action-button-marker {
+  display: block;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  background: var(--ui-action-marker-color, var(--color-text-primary));
+}
+
+.ui-action-button-marker--heads {
+  border-radius: 50%;
+}
+
+.ui-action-button-marker--tails {
+  width: 10px;
+  height: 10px;
+  flex-basis: 10px;
+  margin: 0 2px;
+  transform: rotate(45deg);
 }
 
 .ui-action-button:disabled {
@@ -1164,8 +1244,8 @@ textarea::placeholder {
   left: 50%;
   transform: translate(-50%, -50%);
   transform-origin: center;
-  background: #1A3242;
-  border: 4px solid rgba(0, 231, 1, 0.9);
+  background: var(--color-bg-shell);
+  border: 4px solid var(--color-success-border);
   border-radius: 16px;
   padding: 18px 16px;
   text-align: center;
@@ -1175,6 +1255,17 @@ textarea::placeholder {
   pointer-events: none;
   z-index: 60;
   animation: ui-win-pop 160ms ease-out;
+}
+
+.ui-win-popup--compact {
+  border-radius: 14px;
+  padding: 14px 20px;
+  min-width: 200px;
+}
+
+.ui-win-popup--blackjack {
+  padding: 16px 22px;
+  z-index: 5;
 }
 
 @keyframes ui-win-pop {
@@ -1233,6 +1324,7 @@ textarea::placeholder {
    simply fall off the (faded) left edge. Green = won, grey = lost.
    Games compose these classes and only supply placement. */
 .ui-history-row {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1249,6 +1341,20 @@ textarea::placeholder {
      (Crash parity — its local row uses the same 6px) */
   margin-bottom: 6px;
 }
+.ui-history-row--overlay {
+  position: absolute;
+  top: var(--stage-pad, 16px);
+  left: var(--stage-pad, 16px);
+  right: var(--stage-pad, 16px);
+  width: auto;
+  max-width: none;
+  margin: 0;
+  z-index: 9;
+}
+.ui-history-row .ui-history-meta {
+  align-self: center;
+  margin: 0;
+}
 /* History marker (Crash is the source of truth — every game with pills
    renders this identical pair): the My-bets icon + "‹ You". It sits INSIDE
    the pills row in every game — pills left, marker right. */
@@ -1258,18 +1364,19 @@ textarea::placeholder {
   justify-content: flex-end;
   gap: 8px;
   flex: 0 0 auto;
-  margin-bottom: 10px;
+  margin: 0;
 }
 .ui-history-icon {
-  flex: 0 0 auto;
-  width: 36px;
+  box-sizing: border-box;
+  flex: 0 0 32px;
+  width: 32px;
   height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-pill);
-  background: #2f4553;
-  color: #fff;
+  border-radius: 50%;
+  background: var(--color-history-neutral);
+  color: var(--color-text-primary);
   cursor: pointer;
   transition: filter 140ms ease, transform 100ms ease;
 }
@@ -1324,11 +1431,11 @@ textarea::placeholder {
 }
 .ui-hist-green {
   background: var(--accent-green);
-  color: #07210f;
+  color: var(--color-success-contrast);
 }
 .ui-hist-gray {
-  background: #2f4553;
-  color: #fff;
+  background: var(--color-history-neutral);
+  color: var(--color-text-primary);
 }
 /* Invisible placeholder: rendered from the start so the row's size is
    final before the first real pill exists — zero layout shift, ever. */
@@ -1347,10 +1454,9 @@ textarea::placeholder {
     gap: 6px;
   }
   .ui-history-meta {
-    margin-bottom: 8px;
     gap: 6px;
   }
-  .ui-history-icon { width: 36px; height: 34px; }
+  .ui-history-icon { flex-basis: 34px; width: 34px; height: 34px; }
   .ui-history-you { font-size: 16px; }
   .ui-history-scroll {
     overflow-x: auto;
@@ -1833,6 +1939,19 @@ textarea::placeholder {
   box-shadow: var(--shadow-md);
 }
 
+/* Sidebar readonly values use the same dimensions and hover surface as the
+   editable amount input. Keep this after the legacy readonly fill rule. */
+.sidebar-readonly-input.ui-hover-field {
+  height: var(--sidebar-input-height);
+  background-color: var(--color-bg-panel);
+}
+.sidebar-readonly-input.ui-hover-field:hover {
+  background-color: var(--color-bg-input-hover);
+}
+.sidebar-readonly-input.ui-hover-field input:read-only {
+  cursor: default;
+}
+
 .ui-hover-input {
   width: 100%;
   height: 100%;
@@ -1845,9 +1964,15 @@ textarea::placeholder {
   padding: 0 var(--sidebar-input-padding);
 }
 
+.ui-hover-input--with-suffix {
+  padding-right: 44px;
+}
+
 .ui-hover-suffix {
   position: absolute;
+  top: 50%;
   right: 12px;
+  transform: translateY(-50%);
   color: rgba(255, 255, 255, 0.65);
   font-weight: 900;
   pointer-events: none;

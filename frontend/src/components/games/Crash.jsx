@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
+import HistoryPills from "../common/HistoryPills";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { gamesAPI } from '../../services/api';
 import Stepper from "../common/Stepper";
 import useGameDisabled from "../../hooks/useGameDisabled";
-import usePillSlide from "../../hooks/usePillSlide";
-import usePillFadeOut from "../../hooks/usePillFadeOut";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
 import BetError from "../common/BetError";
@@ -14,7 +14,6 @@ import useGameAudio from "../../hooks/useGameAudio";
 import crashWinMp3 from "../../assets/crash/Win.mp3";
 import styles from './crash.module.css';
 import CurrencyIcon from "../common/CurrencyIcon";
-import { IconArticle } from "../common/Icons";
 
 /**
  * ===========================================================================
@@ -236,8 +235,7 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   // Pill row slides in from the right as one motion on every addition
   // slide key = newest pill's identity (server ids — stable across polls,
   // unlike object references or the capped row length)
-  const newestPillKey = history[0] ? `${history[0].roundId}-${history[0].at}` : null;
-  const { pillsRef, slideKey, slideFrom } = usePillSlide(newestPillKey);
+
   const [lastRound, setLastRound] = useState(null);    // finished round on the board
   const [activeBet, setActiveBet] = useState(null);    // { betAmount, autoCashout }
   const [cashout, setCashout] = useState(null);        // { multiplier, payout }
@@ -277,9 +275,8 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   const bootIdsRef = useRef(null);
   const cooldownActiveRef = useRef(false);
   const lastFrameAtRef = useRef(0);                // render-pump watchdog
-  const historyScrollRef = useRef(null);           // horizontal pill scroller (mobile)
+
   // the outgoing pill fades itself as it leaves the scroller (no gradient mask)
-  usePillFadeOut(historyScrollRef, slideKey);
   const axisRowRef = useRef(null);                 // X axis row (tick clearance)
   const axisClockRef = useRef(null);               // "Total Ns" label in that row
 
@@ -703,9 +700,17 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
       applyState(res.data?.data);
     } catch (e) {
       if (!mountedRef.current) return;
-      const msg = e.response?.data?.message || e.message || 'Bet failed';
-      setBetError(msg);
-      toast.error(msg);
+      const serverMessage = e.response?.data?.message;
+      if (!e.response) {
+        // A connection failure is not bet validation: keep the input clear
+        // and use the shared stacking toast system for the notice.
+        setBetError(null);
+        toast.error("Connection failed. Please try again.");
+      } else {
+        const msg = serverMessage || 'Bet failed';
+        setBetError(msg);
+        toast.error(msg);
+      }
       // the backend attaches its current state so we can resync instantly
       const state = e.response?.data?.data;
       if (state) applyState(state);
@@ -855,16 +860,6 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
     [dispX, compactAxis, tickLimit]
   );
 
-  // When the pill row is scrollable (phones), a newly added round must stay in
-  // view: scroll the freshest pill back into the right-hand edge.
-  useEffect(() => {
-    const el = historyScrollRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
-    const newest = el.firstElementChild?.firstElementChild;
-    if (newest && typeof newest.scrollIntoView === 'function') {
-      newest.scrollIntoView({ inline: 'nearest', block: 'nearest' });
-    }
-  }, [history]);
 
   const cooldownLeft = Math.max(0, cooldownEndsAt - nowServer);
   const inCooldown = cooldownLeft > 0;
@@ -949,7 +944,7 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
 
   // ---- action button
   let actionLabel = 'Bet';
-  let actionClass = styles.betButton;
+  let actionVariant = "primary";
   let actionHandler = handleBet;
   let actionDisabled = false;
 
@@ -959,12 +954,12 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
     actionDisabled = true;
   } else if (phase === 'running') {
     actionLabel = 'Cash Out';
-    actionClass = styles.cashoutBtn;
+    actionVariant = "cashout";
     actionHandler = handleCashout;
     actionDisabled = busy || !activeBet;
   } else if (phase === 'cashedOut') {
     actionLabel = 'End Animation';
-    actionClass = styles.stopBtn;
+    actionVariant = "secondary";
     actionHandler = handleStop;
     actionDisabled = busy;
   } else if (phase === 'ended' || phase === 'idle') {
@@ -976,7 +971,7 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   // ---- profit column
   const profitValue = (() => {
     if (phase === 'cashedOut') return Number(cashout?.payout ?? 0) - (activeBet?.betAmount ?? 0);
-    if (phase === 'running' && activeBet) return activeBet.betAmount * Math.max(0, autoCashoutNum - 1);
+    if (phase === 'running' && activeBet) return activeBet.betAmount * Math.max(0, displayedMult - 1);
     if (phase === 'ended' && lastRound) return Number(lastRound.netProfit ?? 0);
     return betAmountNum * (autoCashoutNum - 1);
   })();
@@ -989,37 +984,19 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`} type="button">Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>${(user?.balance ?? 0).toFixed(2)}</span>
-          </div>
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-                disabled={isLive || busy}
-              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || isLive}>½</button>
-              <div className={styles.divider}></div>
-              <button onClick={() => adjustBet(2)} disabled={isLocked || isLive}>2×</button>
-            </div>
-          </div>
-          <BetError message={betLockedError} />
-          <BetError message={betError} />
-        </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta={`$${(user?.balance ?? 0).toFixed(2)}`}
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          disabled={isLive || busy}
+          quickAdjustDisabled={isLocked || isLive}
+          errors={[betLockedError, betError]}
+        />
 
         <div className={styles.controlGroup}>
           <div className={styles.labelRow}>
@@ -1048,8 +1025,8 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
         </div>
 
         <span className="ui-bet-wrap">
-          <button
-            className={actionClass}
+          <SidebarBetButton
+            variant={actionVariant}
             onClick={actionHandler}
             data-bet-sound="true"
             disabled={actionDisabled}
@@ -1059,20 +1036,16 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
             {phase === 'running' && activeBet && (
               <span className={styles.btnMult}> {fmt(displayedMult)}×</span>
             )}
-          </button>
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>{profitLabel}</span>
-            <span>${(profitValue > 0 ? profitValue : 0).toFixed(2)}</span>
-          </div>
-          <div className={styles.readonlyInput}>
-            <input type="text" value={`${(profitValue > 0 ? profitValue : 0).toFixed(2)}`} readOnly />
-            <CurrencyIcon className={styles.btcIcon} />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label={profitLabel}
+          meta={`$${(profitValue > 0 ? profitValue : 0).toFixed(2)}`}
+          value={`${(profitValue > 0 ? profitValue : 0).toFixed(2)}`}
+          currency
+        />
       </div>
 
       <div className={styles.gameStage}>
@@ -1082,42 +1055,13 @@ function Crash({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
           <>
             {/* History pills — newest at the right, older continue to the left.
                 On phones the wrapper scrolls sideways instead of clipping. */}
-            <div className={styles.historyRow}>
-              <div className={styles.historyScroll} ref={historyScrollRef}>
-                <div
-                  key={slideKey}
-                  ref={pillsRef}
-                  className={styles.historyPills}
-                  style={slideFrom ? { "--pill-slide-from": `${slideFrom}px` } : undefined}
-                >
-                  {/* Always rendered: an invisible placeholder pill reserves
-                      the row's space until the first real pill swaps in. */}
-                  {history.length === 0 ? (
-                    <span className={`${styles.histPill} ${styles.histGray} ${styles.histPlaceholder}`}>
-                      0.00×
-                    </span>
-                  ) : (
-                    history.map((h) => (
-                      <span
-                        key={`${h.roundId}-${h.at}`}
-                        className={`${styles.histPill} ${h.won ? styles.histGreen : styles.histGray}`}
-                      >
-                        {fmt(h.value)}×
-                      </span>
-                    ))
-                  )}
-                </div>
-              </div>
-            {/* Same row as the pills — pills left, marker right (the universal
-                rule for every pills game). The scroller's flex:1 keeps the
-                marker clear of the pills, so it never steals their width. */}
-            <div className={styles.historyMeta}>
-              <button className={styles.historyIcon} type="button" aria-label="My bets">
-                <IconArticle size={18} />
-              </button>
-              <span className={styles.historyYou}>‹ You</span>
-            </div>
-            </div>
+            <HistoryPills
+          items={history}
+          getValue={(h) => `${fmt(h.value)}×`}
+          placeholder="0.00×"
+          getKey={(h) => `${h.roundId}-${h.at}`}
+          placement="overlay"
+        />
 
             {/* Round clock, phone layout only: top right, right under the pills
                 (on desktop it lives at the end of the X axis row instead). */}

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton, SidebarActionButton } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -23,7 +25,6 @@ import t2t from "../../assets/flip/flipping_tails-to-tails.mp4";
 import flipRoundMp3 from "../../assets/flip/Flip.mp3";
 import flipWinMp3 from "../../assets/flip/Win.mp3";
 import flipMidWinMp3 from "../../assets/flip/midwin.mp3";
-import CurrencyIcon from "../common/CurrencyIcon";
 
 // Chain-bet hygiene: the backend allows at most 8 decimals, but every win
 // multiplies the stake by 1.98, so float artifacts accumulate flip after
@@ -398,41 +399,20 @@ function Flip({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
     <div className={styles.container}>
       <div className={styles.sidebar}>
         <div className={styles.controlsHeader}>
-          <div className={styles.modeToggle}>
-            <button className={`${styles.modeBtn} ${styles.active}`}>Manual</button>
-            <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-          </div>
+          <SidebarModeToggle />
         </div>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-                disabled={roundActive}
-              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || isBusy || roundActive}>
-                ½
-              </button>
-              <div className={styles.divider}></div>
-              <button onClick={() => adjustBet(2)} disabled={isLocked || isBusy || roundActive}>
-                2×
-              </button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          disabled={roundActive}
+          quickAdjustDisabled={isLocked || isBusy || roundActive}
+          errors={[betLockedError, betError]}
+        />
 
         <span className="ui-bet-wrap">
           {/* One button for the whole round: "Bet" until the bet is placed,
@@ -441,14 +421,13 @@ function Flip({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
               flip is in flight — until that phase resolves. (The backend
               independently refuses overlapping flips, so the disabled
               window holds even if the UI is bypassed.) */}
-          <button
-            className={styles.betButton}
+          <SidebarBetButton
             onClick={stage === "bet" ? handleBet : handleCollect}
             disabled={isLocked || stage === "flipping" || (stage === "choose" && chainCount === 0)}
             data-bet-sound="true"
             title={isLocked ? betErrorMessage : undefined}>
           {stage === "bet" ? "Bet" : "Cashout"}
-          </button>
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
@@ -462,36 +441,32 @@ function Flip({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
         </button>
 
         <div className={styles.sideSelector}>
-          <button
+          <SidebarActionButton
             className={styles.sideBtn}
+            label="Heads"
+            layout="space-between"
+            marker="heads"
+            markerColor="var(--color-action-heads)"
             onClick={() => flip("heads")}
             disabled={!awaitingChoice || isBusy}
-            type="button"
-          >
-            <span className={styles.textSide}>Heads</span>
-            <div className={styles.dotHeads}></div>
-          </button>
-          <button
+          />
+          <SidebarActionButton
             className={styles.sideBtn}
+            label="Tails"
+            layout="space-between"
+            marker="tails"
+            markerColor="var(--color-action-tails)"
             onClick={() => flip("tails")}
             disabled={!awaitingChoice || isBusy}
-            type="button"
-          >
-            <span className={styles.textSide}>Tails</span>
-            <div className={styles.dotTails}></div>
-          </button>
+          />
         </div>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>{roundActive ? "Total Profit" : "Total Profit (0.98×)"}</span>
-            <span>$0.00</span>
-          </div>
-          <div className={`${styles.readonlyInput} ${styles.profitInput}`}>
-            <input type="text" value={Number(totalProfit || 0).toFixed(2)} readOnly />
-            <CurrencyIcon className={styles.btcIcon} />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label={roundActive ? "Total Profit" : "Total Profit (0.98×)"}
+          meta="$0.00"
+          value={Number(totalProfit || 0).toFixed(2)}
+          currency
+        />
       </div>
 
       <div className={styles.gameStage}>
@@ -501,11 +476,7 @@ function Flip({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
           <>
         {/* ✅ Limbo-style win popup */}
         {showWinPopup && (
-          <div className={styles.winPopup} role="status" aria-live="polite">
-            <div className={styles.winPopupMult}>{Number(winMult || 1.98).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{Number(winPayout || 0).toFixed(2)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={winMult || 1.98} amount={winPayout || 0} />
         )}
 
         <div className={styles.coinVideoWrap}>

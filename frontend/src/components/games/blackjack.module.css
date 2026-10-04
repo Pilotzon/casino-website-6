@@ -76,24 +76,6 @@
 .modeToggle {
   composes: sidebar-mode-toggle from global;
 }
-
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-
-.active {
-  composes: sidebar-mode-active from global;
-}
-
-.controlGroup {
-  composes: sidebar-control-group from global;
-}
-
-.labelRow {
-  composes: sidebar-label-row from global;
-  /* same #8596a6 labels as every other game */
-}
-
 /* =========================================================
    Sidebar controls — shared styling lives in styles/global.css
    (composed here so every game matches). Blackjack-specific
@@ -102,73 +84,39 @@
 .inputGroup {
   composes: sidebar-input-group from global;
 }
-
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-  margin: 0 10px;
-}
-
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-
-.divider {
-  composes: sidebar-divider from global;
-}
-
 .actionGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-/* Action buttons — the shared side action button (global.css), the
-   same look as the Coin Flip game's action buttons. */
-.actionButton {
-  composes: ui-action-button from global;
+.insuranceOffer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--color-divider-panel);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-input);
 }
 
-/* Action icon (filled SVG images inside buttons) */
-.actionIcon {
-  width: 18px;
-  height: 18px;
-  display: block;
-  user-select: none;
-  -webkit-user-drag: none;
-  transition: filter 0.15s;
+.insuranceHint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
-/* ── Hit: #ff9d00 ── */
-.actionHit .actionIcon {
-  filter:
-    brightness(0) saturate(100%) invert(67%) sepia(72%) saturate(1500%) hue-rotate(360deg) brightness(102%) contrast(104%);
-}
-
-/* ── Stand: #9000ff ── */
-.actionStand .actionIcon {
-  filter:
-    brightness(0) saturate(100%) invert(18%) sepia(95%) saturate(5000%) hue-rotate(265deg) brightness(105%) contrast(115%);
-}
-
-/* ── Split: #fff ── */
-.actionSplit .actionIcon {
-  filter: brightness(0) invert(1);
-}
-
-/* ── Double: #fff ── */
-.actionDouble .actionIcon {
-  filter: brightness(0) invert(1);
-}
-
-
-
-
-.betButton {
-  composes: sidebar-bet-button from global;
+.insuranceChoice {
+  width: 100%;
+  min-width: 0;
+  min-height: 52px;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: normal;
 }
 
 /* Board */
@@ -246,6 +194,37 @@
   padding: 6px;
 }
 
+.handWrapActive {
+  outline: 2px solid var(--color-blackjack-active);
+  outline-offset: 1px;
+  background: color-mix(in srgb, var(--color-blackjack-active) 8%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--color-blackjack-active) 32%, transparent);
+}
+
+.handWrapActive::before {
+  content: "YOUR TURN";
+  position: absolute;
+  z-index: 25;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 9px;
+  border: 1px solid var(--color-blackjack-active);
+  border-radius: 999px;
+  background: var(--color-bg-input);
+  color: var(--color-blackjack-active);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.handWrapActive .totalPillPlayer {
+  box-shadow: 0 0 0 2px var(--color-bg-game), 0 0 0 4px var(--color-blackjack-active), 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
 .fanBottom {
   position: absolute;
   left: 0;
@@ -297,6 +276,20 @@
   transition:
     right var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1),
     top var(--bj-shift, 400ms) cubic-bezier(0.3, 0.7, 0.4, 1);
+}
+
+@keyframes splitReposition {
+  from {
+    transform: translate(var(--split-from-x, 0px), var(--split-from-y, 0px));
+  }
+
+  to {
+    transform: translate(0, 0);
+  }
+}
+
+.totalSplitMove {
+  animation: splitReposition 400ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
 }
 
 /* Settled totals take the SAME colour as the cards' outcome outline —
@@ -367,6 +360,12 @@
   transform: translateZ(0);
   backface-visibility: hidden;
   will-change: transform, opacity;
+}
+
+/* Original split cards move to the two new seats on a straight track.
+   New draw cards use .cardDeal / dealIn and launch on the same 400ms cadence. */
+.cardSplitMove {
+  animation: splitReposition 400ms cubic-bezier(0.3, 0.7, 0.4, 1) both;
 }
 
 .card {
@@ -618,38 +617,6 @@
 
 /* Result popup — shared, dead-centre overlay (global.css). The state
    (win/lose/push) only recolours the border + title; nothing moves. */
-.resultPopup {
-  composes: ui-win-popup from global;
-  padding: 16px 22px;
-  z-index: 5;
-}
-
-.resultPopupTitle {
-  composes: ui-win-popup-title from global;
-}
-
-.resultPopupAmount {
-  composes: ui-win-popup-amount from global;
-}
-
-.resultPopupMult {
-  composes: ui-win-popup-mult from global;
-}
-
-.resultPopupDivider {
-  composes: ui-win-popup-divider from global;
-}
-
-/* win — scoped so the state border beats the shared default (the only
-   popup variant: loss/push popups were removed globally) */
-.resultPopup.popupWin {
-  border-color: rgba(0, 231, 1, 0.90);
-}
-
-.popupWin .resultPopupTitle {
-  color: var(--accent-green);
-}
-
 /* Responsive */
 @media (max-width: 900px) {
   .container {
@@ -699,11 +666,6 @@
     --bj-overlap-y: 13px;
     --bj-rank-size: 33px;
     --bj-suit-size: 58px;
-  }
-
-  /* Result popup stays a true dead-centre overlay on mobile too */
-  .resultPopup {
-    max-width: calc(100% - 32px);
   }
 
   .playerArea {

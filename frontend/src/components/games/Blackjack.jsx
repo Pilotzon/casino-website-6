@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton, SidebarActionButton } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -32,7 +34,6 @@ import loseWav from "../../assets/blackjack/Lose.wav";
 import flipMp3 from "../../assets/blackjack/Flip.mp3";
 
 import useGameAudio from "../../hooks/useGameAudio";
-import CurrencyIcon from "../common/CurrencyIcon";
 
 const BJ_START_URL = "/api/games/blackjack/start";
 const BJ_ACTION_URL = "/api/games/blackjack/action";
@@ -230,11 +231,18 @@ function cardKey(c, i) {
   return c.id ?? `${c.r}-${c.s}-${i}`;
 }
 
-function summarizeResult(handOutcomes, totalPayout) {
-  const outs = handOutcomes || [];
-  if (outs.some((o) => o === "win")) return { status: "win", payout: totalPayout };
-  if (outs.length > 0 && outs.every((o) => o === "push")) return { status: "push", payout: totalPayout };
-  return { status: "lose", payout: 0 };
+// Card identity stays stable when a split moves an existing card into a new hand.
+function cardMotionId(card) {
+  if (!card || card.hidden) return "";
+  return String(card.id ?? `${card.r ?? card.rank ?? card.value}-${card.s ?? card.suit}`);
+}
+
+function summarizeResult(totalPayout, totalStake) {
+  const payout = Math.max(0, Number(totalPayout) || 0);
+  const stake = Math.max(0, Number(totalStake) || 0);
+  const net = payout - stake;
+  const status = net > 1e-8 ? "win" : net < -1e-8 ? "lose" : "push";
+  return { status, payout };
 }
 
 function sum(arr) {
@@ -350,8 +358,12 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   const dealerSoundTimersRef = useRef([]);
 
   const [ui, setUi] = useState(() => ({
-    phase: "idle", // idle | playerTurn | settled
+    phase: "idle", // idle | insurance | playerTurn | settled
     roundId: null,
+    baseBet: 0,
+    insurancePending: false,
+    insuranceBet: 0,
+    insurancePayout: 0,
 
     dealer: [],
     playerHands: [[]],
@@ -403,6 +415,14 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     dealerShiftMs: 0,
   }));
 
+  const [splitMotion, setSplitMotion] = useState({
+    preparing: false,
+    cardMoves: {},
+    totalMoves: {},
+    dealDelays: {},
+  });
+  const splitOriginsRef = useRef(null);
+
   // ---- Deal-origin geometry (see dealFromVars() above for the guide) ----
   const stageRef = useRef(null);
   const deckRef = useRef(null);
@@ -435,11 +455,72 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     });
   };
 
-  // Fans + deck are always mounted (even with no cards), so the initial
-  // deal already has exact vectors; splits mount a new fan (playerHands
-  // grows) and mid-round cards all carry 150ms+ delays, so the re-measure
-  // always lands before their flights start.
+  const captureSplitOrigin = (splitAt) => {
+    const stage = stageRef.current;
+    if (!stage) return { splitAt, cards: {}, totals: {} };
+    const rectOf = (element) => {
+      const rect = element.getBoundingClientRect();
+      return { left: rect.left, top: rect.top };
+    };
+    const cards = {};
+    const totals = {};
+    stage.querySelectorAll("[data-bj-motion-card]").forEach((element) => {
+      cards[element.getAttribute("data-bj-motion-card")] = rectOf(element);
+    });
+    stage.querySelectorAll("[data-hand-total-index]").forEach((element) => {
+      totals[Number(element.getAttribute("data-hand-total-index"))] = rectOf(element);
+    });
+    return { splitAt, cards, totals };
+  };
+
+  // Fans + deck are always mounted. On a split, measure old card/total
+  // positions and use a straight FLIP translate so original cards separate
+  // from their old seats while newly drawn cards fly from the deck.
   useLayoutEffect(() => {
+    const origin = splitOriginsRef.current;
+    if (origin && origin.expectedHands === ui.playerHands.length) {
+      const stage = stageRef.current;
+      const rectOf = (element) => {
+        const rect = element.getBoundingClientRect();
+        return { left: rect.left, top: rect.top };
+      };
+      const cardMoves = {};
+      const totalMoves = {};
+
+      stage?.querySelectorAll("[data-bj-motion-card]").forEach((element) => {
+        const id = element.getAttribute("data-bj-motion-card");
+        const from = origin.cards[id];
+        if (!from) return;
+        const to = rectOf(element);
+        const x = from.left - to.left;
+        const y = from.top - to.top;
+        if (Math.abs(x) > 1 || Math.abs(y) > 1) cardMoves[id] = { x, y };
+      });
+
+      stage?.querySelectorAll("[data-hand-total-index]").forEach((element) => {
+        const index = Number(element.getAttribute("data-hand-total-index"));
+        const sourceIndex = index <= origin.splitAt
+          ? index
+          : index === origin.splitAt + 1
+            ? origin.splitAt
+            : index - 1;
+        const from = origin.totals[sourceIndex];
+        if (!from) return;
+        const to = rectOf(element);
+        const x = from.left - to.left;
+        const y = from.top - to.top;
+        if (Math.abs(x) > 1 || Math.abs(y) > 1) totalMoves[index] = { x, y };
+      });
+
+      splitOriginsRef.current = null;
+      setSplitMotion((current) => ({
+        ...current,
+        preparing: false,
+        cardMoves: { ...current.cardMoves, ...cardMoves },
+        totalMoves: { ...current.totalMoves, ...totalMoves },
+      }));
+    }
+
     measureDealGeom();
     window.addEventListener("resize", measureDealGeom);
     return () => window.removeEventListener("resize", measureDealGeom);
@@ -508,18 +589,54 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
   const canHit = canAct;
   const canStand = canAct;
+  const additionalBet = Number(ui.baseBet || bet);
 
   const canDouble =
     canAct &&
     activeHand.length === 2 &&
-    (Number.isFinite(bet) ? (user?.balance ?? 0) >= bet : true);
+    (Number.isFinite(additionalBet) ? (user?.balance ?? 0) >= additionalBet : true);
 
   const canSplit =
     canAct &&
+    ui.playerHands.length < 4 &&
     activeHand.length === 2 &&
     activeHand?.[0]?.r &&
     activeHand?.[0]?.r === activeHand?.[1]?.r &&
-    (Number.isFinite(bet) ? (user?.balance ?? 0) >= bet : true);
+    (Number.isFinite(additionalBet) ? (user?.balance ?? 0) >= additionalBet : true);
+
+  const insuranceOffer = additionalBet / 2;
+  const canInsure = ui.insurancePending && !ui.busy && Number(user?.balance ?? 0) >= insuranceOffer;
+  const committedHandBets = ui.roundId ? sum(ui.handBets) : bet;
+  const committedInsurance = ui.roundId ? Number(ui.insuranceBet || 0) : 0;
+  const netResult = Number(ui.payout || 0) - committedHandBets - committedInsurance;
+  const knownOutcomes = ui.showResult ? (ui.pendingOutcomes ?? ui.handOutcomes) : ui.handOutcomes;
+  const profitOnWin = ui.roundId && ui.phase === "settled"
+    ? netResult
+    : ui.roundId
+      ? (ui.handBets || []).reduce((total, stake, index) => {
+        const outcome = knownOutcomes?.[index];
+        if (outcome === "lose") return total - Number(stake || 0);
+        if (outcome === "push") return total;
+        const hand = ui.playerHands?.[index] ?? [];
+        const isNatural = ui.playerHands.length === 1 && hand.length === 2 && handTotalUi(hand) === 21;
+        return total + Number(stake || 0) * (isNatural ? 1.5 : 1);
+      }, -committedInsurance)
+      : bet;
+  const profitMeta = ui.phase === "settled"
+    ? ui.insurancePayout > 0
+      ? "Insurance paid"
+      : ui.insuranceBet > 0
+        ? "Insurance lost"
+        : Math.abs(netResult) <= 1e-8
+          ? "Push"
+          : netResult < 0
+            ? "Round settled"
+            : "Round won"
+    : ui.insurancePending
+      ? `Insurance option: $${insuranceOffer.toFixed(2)}`
+      : ui.roundId
+        ? `${ui.handBets.length} ${ui.handBets.length === 1 ? "hand" : "hands"} · $${committedHandBets.toFixed(2)} at risk`
+        : undefined;
 
   const adjustBet = (mult) => {
     const curr = Number.parseFloat(betAmount) || 0;
@@ -593,7 +710,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   // numbers, travels with them.
   // `ui` is the state BEFORE this response: a dealer draw or a hit leaves the
   // cards already down where they are and only the fresh ones step the hand up.
-  const planHandLayouts = (gs, shiftMs, { initialDeal } = {}) => {
+  const planHandLayouts = (gs, shiftMs, { initialDeal, splitInfo } = {}) => {
     const prevDealer = initialDeal ? 0 : (ui.dealer?.length ?? 0);
     const prevHands = initialDeal ? [] : (ui.playerHands ?? []);
     const dealerCards = (gs.dealerHand ?? []).length;
@@ -608,7 +725,17 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     };
 
     const dealerPlan = plan(prevDealer, dealerCards);
-    const handPlans = hands.map((hand, hIdx) => plan(prevHands[hIdx]?.length ?? 0, hand?.length ?? 0));
+    const handPlans = hands.map((hand, hIdx) => {
+      if (!splitInfo) return plan(prevHands[hIdx]?.length ?? 0, hand?.length ?? 0);
+      const len = hand?.length ?? 0;
+      if (!len) return { start: 0, steps: [] };
+      const start = Math.min(Math.max(Number(splitInfo.carryCounts[hIdx]) || 1, 1), len);
+      const steps = [];
+      hand.forEach((card, index) => {
+        if (!splitInfo.previousIds.has(cardMotionId(card))) steps.push(index);
+      });
+      return { start, steps };
+    });
 
     clearLayoutTimers();
 
@@ -629,7 +756,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
               counts[hIdx] = i + 1;
               return { ...prev, handLayouts: { ...prev.handLayouts, hands: counts } };
             });
-          }, playerDealDelay(hIdx, i))
+          }, splitInfo?.delayByCardId?.[cardMotionId(hands[hIdx]?.[i])] ?? playerDealDelay(hIdx, i))
         );
       });
     });
@@ -828,7 +955,6 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
   const scheduleReveal = ({
     gs,
-    outcomes,
     payout,
     hadHoleCardHidden,
     shift = 0,
@@ -840,7 +966,9 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       revealTimerRef.current = null;
     }
 
-    const { status, payout: summaryPayout } = summarizeResult(outcomes, payout);
+    const totalStake = sum(gs.handBets ?? (gs.hands || []).map((hand) => hand.bet))
+      + Number(gs.insuranceBet || 0);
+    const { status, payout: summaryPayout } = summarizeResult(payout, totalStake);
 
     // the reveal waits for every card still animating: the hole flip, any
     // dealer draws flipping face-up one by one, a hole card revealed as part
@@ -884,7 +1012,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   // initialDeal marks the FIRST deal of a round (handleDeal): if that deal
   // already ended the round (a natural on either side) its hole card is
   // revealed right there, as part of the deal (see holeRevealAt below).
-  const applyServerState = (data, { dealerShiftMs = 0, playerFlipEnd = null, initialDeal = false } = {}) => {
+  const applyServerState = (data, { dealerShiftMs = 0, playerFlipEnd = null, initialDeal = false, splitInfo = null } = {}) => {
     const gs = data.gameState;
     if (!gs) throw new Error("Invalid server response (missing gameState)");
 
@@ -921,12 +1049,16 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
 
     // how many cards each hand is laid out for right now, plus the timers
     // that step it up at each fresh card's flight start (see planHandLayouts)
-    const handLayouts = planHandLayouts(gs, dealerShiftMs, { initialDeal });
+    const handLayouts = planHandLayouts(gs, dealerShiftMs, { initialDeal, splitInfo });
 
     setUi((s) => ({
       ...s,
-      phase: settled ? "settled" : "playerTurn",
+      phase: settled ? "settled" : gs.insurancePending ? "insurance" : "playerTurn",
       roundId: gs.roundId ?? s.roundId,
+      baseBet: Number(gs.baseBet ?? gs.handBets?.[0] ?? s.baseBet ?? 0),
+      insurancePending: !!gs.insurancePending,
+      insuranceBet: Number(gs.insuranceBet || 0),
+      insurancePayout: Number(gs.insurancePayout || 0),
 
       dealer,
       playerHands,
@@ -968,7 +1100,6 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       scheduleDealerTotalCountUp({ gs, hadHoleCardHidden, shift: dealerShiftMs, holeRevealEnd });
       scheduleReveal({
         gs,
-        outcomes: serverOutcomes,
         payout: serverPayout,
         hadHoleCardHidden,
         shift: dealerShiftMs,
@@ -1075,7 +1206,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
     if (ui.busy) return;
 
     const prevBalance = user?.balance ?? 0;
-    const extraCost = action === "double" || action === "split" ? bet : 0;
+    const extraCost = action === "double" || action === "split" ? additionalBet : 0;
 
     if (extraCost > 0) {
       if (extraCost > prevBalance) { setBetError("Insufficient balance"); return; }
@@ -1096,6 +1227,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
       // shifts the whole dealer turn to its own arrival-triggered phase
       let dealerShiftMs = 0;
       let playerFlipEnd = null;
+      let splitInfo = null;
 
       if (action === "hit" || action === "double") {
         setTimeout(() => sfx.play("card", { volume: 1 }), DEAL_EXTRA_MS);
@@ -1114,41 +1246,67 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
         }
       }
       if (action === "split") {
-        setTimeout(() => sfx.play("card", { volume: 1 }), 0);
-        setTimeout(() => sfx.play("card", { volume: 1 }), DEAL_EXTRA_MS + DEAL_STEP_MS);
-        setTimeout(() => sfx.play("card", { volume: 1 }), 2 * DEAL_STEP_MS);
-        // split rearranges cards between hands: recount each hand from the
-        // already-visible carry-overs now, then step the fresh card(s) in
-        // as their flips complete (a plain max() would count them early)
-        const ck = (c) => c?.id ?? `${c?.r ?? c?.rank}-${c?.s ?? c?.suit}`;
+        const splitAt = ui.activeHandIndex ?? 0;
         const hands = data.gameState?.playerHands ?? [];
         const prevHands = ui.playerHands ?? [];
-        // a card carried into its new hand is already on the table, so it is
-        // already counted: each hand's label starts at its carried card and
-        // then counts its own fresh card as that card LANDS
-        const counts = [...(ui.playerLandedCounts ?? [])];
+        const previousIds = new Set(prevHands.flat().map(cardMotionId).filter(Boolean));
+        const delayByCardId = {};
+        let sequence = 0;
+        const carryCounts = hands.map((hand) => (hand ?? []).filter((card) => previousIds.has(cardMotionId(card))).length);
+
+        // Original cards are captured in place; both new cards then start a
+        // straight deck-to-seat flight, one per deal-step with no lead-in.
         hands.forEach((hand, hIdx) => {
-          const prevIds = new Set((prevHands[hIdx] ?? []).map(ck));
-          const carry = (hand ?? []).filter((c) => prevIds.has(ck(c))).length;
-          counts[hIdx] = carry;
-          for (let i = carry; i < (hand?.length ?? 0); i++) {
-            schedulePlayerTotalStep(hIdx, playerDealDelay(hIdx, i) + DEAL_FLIGHT_MS, i + 1);
-          }
-          if ((hand?.length ?? 0) > carry) {
-            const flipEnd = playerDealDelay(hIdx, (hand?.length ?? 1) - 1) + DEAL_FLIGHT_MS + DEAL_FLIP_MS;
-            // split-aces auto-settles: the reveal must await these flips
-            playerFlipEnd = Math.max(playerFlipEnd ?? 0, flipEnd);
-          }
+          (hand ?? []).forEach((card) => {
+            const id = cardMotionId(card);
+            if (id && !previousIds.has(id) && !Object.prototype.hasOwnProperty.call(delayByCardId, id)) {
+              const delay = sequence++ * DEAL_STEP_MS;
+              delayByCardId[id] = delay;
+              setTimeout(() => sfx.play("card", { volume: 1 }), delay);
+              schedulePlayerTotalStep(hIdx, delay + DEAL_FLIGHT_MS, (hand ?? []).indexOf(card) + 1);
+              playerFlipEnd = Math.max(playerFlipEnd ?? 0, delay + DEAL_FLIGHT_MS + DEAL_FLIP_MS);
+            }
+          });
         });
-        setUi((s) => ({ ...s, playerLandedCounts: counts }));
+
+        const origin = captureSplitOrigin(splitAt);
+        splitOriginsRef.current = { ...origin, expectedHands: hands.length };
+        splitInfo = { splitAt, previousIds, carryCounts, delayByCardId };
+        setSplitMotion((current) => ({
+          ...current,
+          preparing: true,
+          dealDelays: { ...current.dealDelays, ...delayByCardId },
+        }));
+        setUi((current) => ({ ...current, playerLandedCounts: carryCounts }));
       }
 
-      applyServerState(data, { dealerShiftMs, playerFlipEnd });
+      applyServerState(data, { dealerShiftMs, playerFlipEnd, splitInfo });
     } catch (e) {
       console.error("Blackjack action failed:", e);
       if (extraCost > 0) updateBalance?.(prevBalance);
       toast.error(e.message || "Action failed");
       setUi((s) => ({ ...s, busy: false }));
+    }
+  };
+
+  const handleInsurance = async (acceptInsurance) => {
+    if (!ui.roundId || !ui.insurancePending || ui.busy) return;
+    if (acceptInsurance && !canInsure) {
+      toast.error("Insufficient balance for insurance");
+      return;
+    }
+
+    setUi((current) => ({ ...current, busy: true }));
+    try {
+      const data = await apiPost(BJ_ACTION_URL, {
+        roundId: ui.roundId,
+        action: acceptInsurance ? "insurance" : "decline_insurance",
+      });
+      applyServerState(data);
+    } catch (e) {
+      console.error("Blackjack insurance decision failed:", e);
+      toast.error(e.message || "Insurance decision failed");
+      setUi((current) => ({ ...current, busy: false }));
     }
   };
 
@@ -1162,71 +1320,91 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`} type="button">
-            Manual
-          </button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>
-            Auto
-          </button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          errors={[betLockedError, betError]}
+        />
+
+        {ui.insurancePending ? (
+          <div className={styles.insuranceOffer} role="group" aria-label="Dealer blackjack insurance">
+            <p className={styles.insuranceHint}>
+              Dealer shows an Ace. Insurance costs half your original bet.
+            </p>
+            <SidebarActionButton
+              className={styles.insuranceChoice}
+              label={`Insure · $${insuranceOffer.toFixed(2)}`}
+              onClick={() => handleInsurance(true)}
+              disabled={!canInsure}
+              title={canInsure ? undefined : `You need $${insuranceOffer.toFixed(2)} available`}
+              marker="circle"
+              markerColor="var(--color-accent-red)"
+            />
+            <SidebarActionButton
+              className={styles.insuranceChoice}
+              label="No Insurance"
+              onClick={() => handleInsurance(false)}
+              disabled={ui.busy}
+              marker="circle"
+              markerColor="var(--color-text-muted)"
+            />
           </div>
-
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-              />
-            </div>
-
-            <CurrencyIcon className={styles.btcIcon} />
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)}>½</button>
-              <div className={styles.divider} />
-              <button onClick={() => adjustBet(2)}>2×</button>
-            </div>
+        ) : (
+          <div className={styles.actionGrid}>
+            <SidebarActionButton
+              label="Hit"
+              icon={hitSvg}
+              iconColor="var(--color-action-hit)"
+              onClick={() => handleAction("hit")}
+              disabled={!canHit}
+            />
+            <SidebarActionButton
+              label="Stand"
+              icon={standSvg}
+              iconColor="var(--color-action-stand)"
+              onClick={() => handleAction("stand")}
+              disabled={!canStand}
+            />
+            <SidebarActionButton
+              label="Split"
+              icon={splitSvg}
+              onClick={() => handleAction("split")}
+              disabled={!canSplit}
+            />
+            <SidebarActionButton
+              label="Double"
+              icon={doubleSvg}
+              onClick={() => handleAction("double")}
+              disabled={!canDouble}
+            />
           </div>
-          <BetError message={betLockedError} />
-          <BetError message={betError} />
-        </div>
-
-        <div className={styles.actionGrid}>
-          <button className={`${styles.actionButton} ${styles.actionHit}`} onClick={() => handleAction("hit")} disabled={!canHit}>
-            Hit
-            <img className={styles.actionIcon} src={hitSvg} alt="" draggable="false" />
-          </button>
-
-          <button className={`${styles.actionButton} ${styles.actionStand}`} onClick={() => handleAction("stand")} disabled={!canStand}>
-            Stand
-            <img className={styles.actionIcon} src={standSvg} alt="" draggable="false" />
-          </button>
-
-          <button className={`${styles.actionButton} ${styles.actionSplit}`} onClick={() => handleAction("split")} disabled={!canSplit}>
-            Split
-            <img className={styles.actionIcon} src={splitSvg} alt="" draggable="false" />
-          </button>
-
-          <button className={`${styles.actionButton} ${styles.actionDouble}`} onClick={() => handleAction("double")} disabled={!canDouble}>
-            Double
-            <img className={styles.actionIcon} src={doubleSvg} alt="" draggable="false" />
-          </button>
-        </div>
+        )}
 
         <span className="ui-bet-wrap">
-          <button className={styles.betButton} onClick={handleDeal} disabled={isLocked || !canDeal} data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>
-            {ui.busy ? "..." : "Bet"}
-          </button>
+          <SidebarBetButton
+            onClick={handleDeal}
+            data-bet-sound="true"
+            disabled={!canDeal || isLocked}
+            title={isLocked ? betErrorMessage : undefined}
+          >
+            {ui.busy ? "Dealing…" : ui.phase === "settled" ? "New Bet" : "Bet"}
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
+
+        <SidebarReadOnlyField
+          label={ui.phase === "settled" ? "Net Result" : "Profit on Win"}
+          value={Number.isFinite(profitOnWin) ? profitOnWin.toFixed(2) : "0.00"}
+          meta={profitMeta}
+          currency
+          ariaLabel="Blackjack profit on win"
+        />
       </div>
 
       <div className={styles.gameStage} ref={stageRef}>
@@ -1242,18 +1420,13 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
             total pills' tones + sounds, never a popup (global rule: the
             "lost" popup variant is gone from every game). */}
             {ui.showResult && ui.resultStatus === "win" && (
-              <div
-                className={`${styles.resultPopup} ${styles.popupWin}`}
-              >
-                <div className={styles.resultPopupMult}>
-                  {(sum(ui.handBets) > 0
-                    ? Number(ui.resultPayout || 0) / sum(ui.handBets)
-                    : 0
-                  ).toFixed(2)}×
-                </div>
-                <div className={styles.resultPopupDivider} aria-hidden="true" />
-                <div className={styles.resultPopupAmount}>{Number(ui.resultPayout || 0).toFixed(2)}<CurrencyIcon /></div>
-              </div>
+              <GameWinPopup
+                multiplier={committedHandBets + committedInsurance > 0
+                  ? Number(ui.resultPayout || 0) / (committedHandBets + committedInsurance)
+                  : 0}
+                amount={Number(ui.resultPayout || 0)}
+                variant="blackjack"
+              />
             )}
 
             <div className={styles.dealerArea}>
@@ -1362,9 +1535,14 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                   const count = handCount(hIdx, hand.length);
                   const y0Of = playerY0(fanGeom?.h);
                   const lay = handLayout(cardGeom, fanGeom, count, y0Of(count));
+                  const isActiveHand = hIdx === ui.activeHandIndex && ui.phase === "playerTurn" && !ui.settled;
 
                   return (
-                    <div key={hIdx} className={styles.handWrap}>
+                    <div
+                      key={hIdx}
+                      className={`${styles.handWrap} ${isActiveHand ? styles.handWrapActive : ""}`}
+                      aria-current={isActiveHand ? "step" : undefined}
+                    >
                       <div className={styles.fanBottom} ref={(el) => { fanBottomRefs.current[hIdx] = el; }}>
                         {/* The total label rides the hand: its right edge on
                             the last card's right edge, its bottom edge on the
@@ -1374,8 +1552,22 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                             it in step with the cards' glide. */}
                         {ui.roundId && shown > 0 ? (
                           <div
-                            className={`${styles.totalPillPlayer} ${pillTone} ${exiting ? styles.totalOut : ""}`}
-                            style={{ right: `${lay.labelRight}px`, bottom: `${lay.labelBottom}px` }}
+                            data-hand-total-index={hIdx}
+                            className={`${styles.totalPillPlayer} ${pillTone} ${isActiveHand ? styles.totalActive : ""} ${exiting ? styles.totalOut : ""} ${splitMotion.totalMoves[hIdx] ? styles.totalSplitMove : ""}`}
+                            style={{
+                              right: `${lay.labelRight}px`,
+                              bottom: `${lay.labelBottom}px`,
+                              // the split-prep render freezes the label's own
+                              // right/bottom glide inline; its travel is the
+                              // split keyframes' job (splitReposition)
+                              ...(splitMotion.preparing ? { transition: "none" } : {}),
+                              ...(splitMotion.totalMoves[hIdx]
+                                ? {
+                                  "--split-from-x": `${splitMotion.totalMoves[hIdx].x}px`,
+                                  "--split-from-y": `${splitMotion.totalMoves[hIdx].y}px`,
+                                }
+                                : {}),
+                            }}
                           >
                             {total}
                           </div>
@@ -1386,6 +1578,8 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                           // already seated where it lands, the rest glide
                           // under it
                           const cardLay = cardLayout(cardGeom, fanGeom, count, i, y0Of);
+                          const motionId = cardMotionId(c);
+                          const splitDelay = splitMotion.dealDelays[motionId];
                           return (
                             <Card
                               key={`${ui.roundId ?? "x"}-${cardKey(c, i)}`}
@@ -1393,11 +1587,14 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
                               x={cardLay.seatX(i)}
                               y={cardLay.seatY(i)}
                               card={c}
+                              motionId={motionId}
+                              splitMove={splitMotion.cardMoves[motionId]}
+                              freezeSeat={splitMotion.preparing}
                               hidden={false}
                               outline={outline}
                               animate
                               cardBackSrc={cardBackSvg}
-                              dealDelayMs={playerDealDelay(hIdx, i)}
+                              dealDelayMs={Number.isFinite(splitDelay) ? splitDelay : playerDealDelay(hIdx, i)}
                               dealFrom={dealFromVars(dealGeom, fanGeom, i)}
                               exiting={!!exiting}
                               exitDelayMs={i * EXIT_STAGGER_MS}
@@ -1417,7 +1614,7 @@ export default function Blackjack({ gameRow, soundEnabled = true, soundVolume = 
   );
 }
 
-function Card({ index, x = 0, y = 0, card, hidden, outline = "none", animate = false, cardBackSrc, flip = false, faceUp = true, dealDelayMs = 0, dealFrom = null, exiting = false, exitDelayMs = 0, flipDelayMs = 0 }) {
+function Card({ index, x = 0, y = 0, card, motionId, splitMove = null, hidden, outline = "none", animate = false, cardBackSrc, flip = false, faceUp = true, dealDelayMs = 0, dealFrom = null, exiting = false, exitDelayMs = 0, flipDelayMs = 0, freezeSeat = false }) {
   const r = card?.r;
   const s = card?.s;
   const red = s ? isRedSuit(s) : false;
@@ -1454,17 +1651,28 @@ function Card({ index, x = 0, y = 0, card, hidden, outline = "none", animate = f
   return (
     <div
       className={styles.cardSlot}
+      data-bj-motion-card={motionId || undefined}
       style={{
         // the seat comes from the hand's layout (handLayout); the stylesheet
         // transitions this transform, so stepping the layout up glides the
-        // cards already on the table into the re-centred group
+        // cards already on the table into the re-centred group. During the
+        // one split-preparation render the glide is suppressed inline: the
+        // cards' move is animated by the split keyframes instead (see
+        // splitReposition in blackjack.module.css).
         transform: `translate(${x}px, ${y}px)`,
+        ...(freezeSeat ? { transition: "none" } : null),
         zIndex: 10 + index,
       }}
     >
       <div
-        className={`${styles.cardMotion} ${exiting ? styles.cardOut : animate ? styles.cardDeal : ""}`}
-        style={exiting ? { animationDelay: `${exitDelayMs}ms` } : animate ? { animationDelay: `${dealDelayMs}ms`, ...(dealFrom || {}) } : undefined}
+        className={`${styles.cardMotion} ${exiting ? styles.cardOut : splitMove ? styles.cardSplitMove : animate ? styles.cardDeal : ""}`}
+        style={exiting
+          ? { animationDelay: `${exitDelayMs}ms` }
+          : splitMove
+            ? { "--split-from-x": `${splitMove.x}px`, "--split-from-y": `${splitMove.y}px` }
+            : animate
+              ? { animationDelay: `${dealDelayMs}ms`, ...(dealFrom || {}) }
+              : undefined}
       >
         <div
           className={`${styles.card} ${hidden ? styles.cardNoClip : ""} ${outline === "blackjack" ? styles.cardOutlineBlackjack : outline === "win" ? styles.cardOutlineWin : outline === "lose" ? styles.cardOutlineLose : outline === "push" ? styles.cardOutlinePush : ""

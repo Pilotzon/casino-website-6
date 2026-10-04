@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton, SidebarActionButton } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -44,7 +46,6 @@ import FlipSound from "../../assets/rps/Flip.mp3";
 import ChooseSound from "../../assets/rps/Choose.wav";
 import WinMidRoundSound from "../../assets/rps/winMidRound.mp3";
 import DrawStateSound from "../../assets/rps/drawState.wav";
-import CurrencyIcon from "../common/CurrencyIcon";
 
 const FLIP_MS = 650;
 const SLIDE_MS = 380;
@@ -395,71 +396,64 @@ export default function RPS({ gameRow }) {
     <div className={styles.container}>
       {/* Sidebar */}
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`} type="button">
-            Manual
-          </button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>
-            Auto
-          </button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>${format2(bet)}</span>
-          </div>
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input type="number" placeholder="0.00" value={betAmount} onChange={(e) => setBetAmount(e.target.value)}
-                step="0.01" disabled={inProgress || isRevealing} />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || inProgress || isRevealing}>½</button>
-              <div className={styles.divider} />
-              <button onClick={() => adjustBet(2)} disabled={isLocked || inProgress || isRevealing}>2×</button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta={`$${format2(bet)}`}
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          step="0.01"
+          disabled={inProgress || isRevealing}
+          quickAdjustDisabled={isLocked || inProgress || isRevealing}
+          errors={[betLockedError, betError]}
+        />
 
         {!inProgress ? (
           <span className="ui-bet-wrap">
-            <button className={styles.betButton} onClick={start} disabled={isLocked || isRevealing} data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>Bet</button>
+            <SidebarBetButton
+              onClick={start}
+              disabled={isLocked || isRevealing}
+              data-bet-sound="true"
+              title={isLocked ? betErrorMessage : undefined}
+            >
+              Bet
+            </SidebarBetButton>
             <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
           </span>
         ) : (
           <div className={styles.betRow}>
-            <button className={styles.cashoutBtn} onClick={cashout} disabled={!canCashout}>Cashout</button>
-            <button className={styles.continueBtn} onClick={continueNext} disabled={!canContinue}>Continue</button>
+            <SidebarBetButton variant="secondary" onClick={cashout} disabled={!canCashout}>Cashout</SidebarBetButton>
+            <SidebarBetButton onClick={continueNext} disabled={!canContinue}>Continue</SidebarBetButton>
           </div>
         )}
 
-        <button className={styles.secondaryButton} onClick={randomPick} disabled={!canChoose}>Random Pick</button>
+        <SidebarBetButton variant="secondary" onClick={randomPick} disabled={!canChoose}>Random Pick</SidebarBetButton>
 
         <div className={styles.choiceRow}>
           {CHOICES.map((c) => (
-            <button key={c.value}
-              className={`${styles.choiceSmall} ${playerChoice === c.value ? styles.choiceSmallActive : ""}`}
-              onClick={() => choose(c.value)} disabled={!canChoose} type="button">
-              <span className={styles.choiceSmallLabel}>{c.label}</span>
-              <img className={styles.choiceSmallIcon} src={c.sidebarIcon} alt="" draggable="false" />
-            </button>
+            <SidebarActionButton
+              key={c.value}
+              className={styles.choiceSmall}
+              label={c.label}
+              icon={c.sidebarIcon}
+              iconSize={14}
+              layout="space-between"
+              active={playerChoice === c.value}
+              onClick={() => choose(c.value)}
+              disabled={!canChoose}
+            />
           ))}
         </div>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Total Profit ({format2(currentMultiplier)}×)</span>
-            <span>${format2((bet * currentMultiplier - bet) || 0)}</span>
-          </div>
-          <div className={`${styles.readonlyMoney} ${styles.profitInput}`}>
-            <input type="text" value={format2(inProgress ? bet * currentMultiplier : 0)} readOnly />
-            <CurrencyIcon className={styles.btcIcon} />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label={`Total Profit (${format2(currentMultiplier)}×)`}
+          meta={`$${format2((bet * currentMultiplier - bet) || 0)}`}
+          value={format2(inProgress ? bet * currentMultiplier : 0)}
+          currency
+        />
       </div>
 
       {/* Stage */}
@@ -470,11 +464,7 @@ export default function RPS({ gameRow }) {
           <>
         {/* Cashout popup — direct child of the stage, dead-centre overlay */}
         {showWinPopup && winAmount > 0 && (
-          <div className={`${styles.cashoutPopup} ${styles.popupWin}`}>
-            <div className={styles.cashoutPopupMult}>{Number(winMult || 0).toFixed(2)}×</div>
-            <div className={styles.cashoutPopupDivider} aria-hidden="true" />
-            <div className={styles.cashoutPopupAmount}>{format2(winAmount)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={winMult || 0} amountText={format2(winAmount)} variant="compact" />
         )}
 
         <div className={styles.stageInner}>

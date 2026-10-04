@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarSelectField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
+import HoverStatField from "../common/HoverStatField";
+import HistoryPills from "../common/HistoryPills";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
-import usePillSlide from "../../hooks/usePillSlide";
-import usePillFadeOut from "../../hooks/usePillFadeOut";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
-import BetError from "../common/BetError";
-import { IconArticle } from "../common/Icons";
 import { gamesAPI } from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import { useToast } from "../../context/ToastContext";
 import styles from "./wheel.module.css";
 import Modal from "../common/Modal";
 import CurrencyIcon from "../common/CurrencyIcon";
@@ -34,8 +35,10 @@ const SPIN_BEZIER = [0.1, 0.8, 0.08, 1];
 
 export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
   const { updateBalance } = useAuth();
+  const toast = useToast();
 
   const [betAmount, setBetAmount] = useState("");
+  const [betError, setBetError] = useState("");
   const { isDisabled, isMobileDisabled, isLocked, disabledTitle, disabledDesc, betErrorMessage } = useGameDisabled(gameRow);
   const [betLockedError, setBetLockedError] = useState("");
   useEffect(() => {
@@ -47,6 +50,7 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
 
   const [loadingLayout, setLoadingLayout] = useState(false);
   const [wheelLayout, setWheelLayout] = useState([]);
+  const [layoutRetry, setLayoutRetry] = useState(0);
 
   const [spinning, setSpinning] = useState(false);
   // Round history for the top pills (newest first, capped)
@@ -54,22 +58,6 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
   // Stable pill ids: the slide keys on the newest pill's IDENTITY (the row
   // is capped, so its length stops changing while new pills keep arriving)
   const pillSeqRef = useRef(0);
-  const historyScrollRef = useRef(null);
-  // Pill row slides in from the right as one motion on every addition
-  const { pillsRef, slideKey, slideFrom } = usePillSlide(history[0]?._pillId ?? null);
-  // the outgoing pill fades itself as it leaves the scroller (no gradient mask)
-  usePillFadeOut(historyScrollRef, slideKey);
-
-  // Crash parity (mobile scroller): keep the freshest pill in view
-  useEffect(() => {
-    const el = historyScrollRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
-    const newest = el.firstElementChild?.firstElementChild;
-    if (newest && typeof newest.scrollIntoView === "function") {
-      newest.scrollIntoView({ inline: "nearest", block: "nearest" });
-    }
-  }, [history]);
-  const [error, setError] = useState("");
 
   const [rotation, setRotation] = useState(0);
 
@@ -87,7 +75,12 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
   const animRef = useRef(0);
   const spinDurationRef = useRef(5000);
   const bet = useMemo(() => parseFloat(betAmount) || 0, [betAmount]);
+  const layoutReady = Array.isArray(wheelLayout) && wheelLayout.length === Number(segments);
   const isMobile = isMobileNow();
+
+  useEffect(() => {
+    if (betError && bet > 0) setBetError("");
+  }, [bet, betError]);
 
   const adjustBet = (factor) => {
     const curr = parseFloat(betAmount);
@@ -95,11 +88,16 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
     setBetAmount(next.toFixed(2));
   };
 
+  const retryLayout = () => {
+    setLayoutRetry((retry) => retry + 1);
+    toast.error("Retrying wheel layout connection.");
+  };
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoadingLayout(true);
-      setError("");
+      setWheelLayout([]);
       try {
         const res = await gamesAPI.getWheelLayout({ riskLevel, segments });
         const payloadWheel = res.data?.wheel ?? res.data?.result?.wheel;
@@ -109,14 +107,18 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
         }
         if (!cancelled) setWheelLayout(w);
       } catch (e) {
-        if (!cancelled) setError(e.response?.data?.message || e.message || "Failed to load wheel layout");
+        if (!cancelled) {
+          const message = e.response?.data?.message || e.message || "Failed to load wheel layout";
+          const isNetworkError = !e.response && (e.code || /network|fetch|timeout|connection/i.test(message));
+          toast.error(isNetworkError ? "Connection failed. Please try again." : message);
+        }
       } finally {
         if (!cancelled) setLoadingLayout(false);
       }
     }
     load();
     return () => { cancelled = true; };
-  }, [riskLevel, segments]);
+  }, [riskLevel, segments, layoutRetry, toast]);
 
   const cells = useMemo(() => {
     const map = new Map();
@@ -178,15 +180,16 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
   const handleSpin = useCallback(async () => {
     const b = parseFloat(betAmount);
     if (!b || b <= 0) {
-      setError("Enter a valid bet amount");
+      setBetError("Enter a valid bet amount");
       return;
     }
-    if (!Array.isArray(wheelLayout) || wheelLayout.length !== Number(segments)) {
-      setError("Wheel layout not ready");
+    if (!layoutReady) {
+      setLayoutRetry((retry) => retry + 1);
+      toast.error("Wheel layout is unavailable. Retrying now.");
       return;
     }
 
-    setError("");
+    setBetError("");
     setSpinning(true);
     setShowWinPopup(false);
     setWinAmount(0);
@@ -246,10 +249,12 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
       }, durationMs + 400);
 
     } catch (err) {
-      setError(err.response?.data?.message || "Spin failed");
+      const message = err.response?.data?.message || err.message || "Spin failed";
+      const isNetworkError = !err.response && (err.code || /network|fetch|timeout|connection/i.test(message));
+      toast.error(isNetworkError ? "Connection failed. Please try again." : message);
       setSpinning(false);
     }
-  }, [betAmount, riskLevel, segments, wheelLayout, rotation, updateBalance]);
+  }, [betAmount, layoutReady, riskLevel, segments, wheelLayout, rotation, updateBalance, toast]);
   // Warn before a page refresh while a bet is live (see RefreshGuard).
   useActiveBetFlag("wheel", spinning);
 
@@ -273,88 +278,51 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`}>Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => { const val = e.target.value; if (/^\d*\.?\d*$/.test(val)) setBetAmount(val); }}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          type="text"
+          inputMode="decimal"
+          disabled={spinning}
+          quickAdjustDisabled={isLocked || spinning}
+          onBlur={() => { const num = parseFloat(betAmount); setBetAmount(Number.isFinite(num) ? num.toFixed(2) : ""); }}
+          errors={[betLockedError, betError]}
+        />
 
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="text"
-                value={betAmount}
-                placeholder="0.00"
-                onChange={(e) => {
-                  const val = e.target.value;
+        <SidebarSelectField
+          label="Difficulty"
+          value={riskLevel}
+          onChange={(e) => setRiskLevel(e.target.value)}
+          disabled={spinning}
+          options={RISK_LEVELS.map((r) => ({ value: r, label: titleCase(r) }))}
+        />
 
-                  // Allow only digits and dot
-                  if (/^\d*\.?\d*$/.test(val)) {
-                    setBetAmount(val);
-                  }
-                }}
-                onBlur={() => {
-                  // Format to 2 decimals when leaving input (empty stays empty)
-                  const num = parseFloat(betAmount);
-                  setBetAmount(Number.isFinite(num) ? num.toFixed(2) : "");
-                }}
-                disabled={spinning}
-              />
-            </div>
-
-
-            <div className={styles.btcChip} aria-hidden="true"><CurrencyIcon className={styles.btcIcon} /></div>
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || spinning}>½</button>
-              <div className={styles.divider} />
-              <button onClick={() => adjustBet(2)} disabled={isLocked || spinning}>2×</button>
-            </div>
-          </div>
-          <BetError message={betLockedError} />
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}><span>Difficulty</span></div>
-          <div className={`${styles.readonlyInput} ${styles.hasCaret}`}>
-            <select className={styles.select} value={riskLevel} onChange={(e) => setRiskLevel(e.target.value)} disabled={spinning}>
-              {RISK_LEVELS.map((r) => <option key={r} value={r}>{titleCase(r)}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}><span>Segments</span></div>
-          <div className={`${styles.readonlyInput} ${styles.hasCaret}`}>
-            <select className={styles.select} value={segments} onChange={(e) => setSegments(Number(e.target.value))} disabled={spinning}>
-              {SEGMENT_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        </div>
+        <SidebarSelectField
+          label="Segments"
+          value={segments}
+          onChange={(e) => setSegments(Number(e.target.value))}
+          disabled={spinning}
+          options={SEGMENT_OPTIONS.map((s) => ({ value: s, label: s }))}
+        />
 
         <span className="ui-bet-wrap">
-          <button
-            className={styles.bigButton}
-            onClick={handleSpin}
+          <SidebarBetButton
+            onClick={layoutReady ? handleSpin : retryLayout}
             data-bet-sound="true"
-            disabled={isLocked || spinning || bet <= 0 || loadingLayout} title={isLocked ? betErrorMessage : undefined}
+            disabled={isLocked || spinning || loadingLayout || (layoutReady && bet <= 0)}
+            title={isLocked ? betErrorMessage : undefined}
             type="button"
-            >
-          {loadingLayout ? "Loading..." : spinning ? "Spinning..." : "Bet"}
-          </button>
+          >
+            {loadingLayout ? "Loading..." : !layoutReady ? "Retry Layout" : spinning ? "Spinning..." : "Bet"}
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
-
-        {/* Error is always rendered (space reserved) so a failure never
-            pushes the Bet button down — empty state is invisible. */}
-        <div className={`${styles.error} ${error ? "" : styles.errorEmpty}`} role="alert" aria-live="polite">
-          {error}
-        </div>
       </div>
 
       <div className={styles.gameStage}>
@@ -365,11 +333,7 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
         {/* Win popup — direct child of the stage so it is always dead
             centred over the whole game area as a true overlay. */}
         {showWinPopup && winAmount > 0 && (
-          <div className={styles.winPopup} role="status" aria-live="polite">
-            <div className={styles.winPopupMult}>{Number(winMult || 0).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{formatMoney(winAmount)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={winMult || 0} amountText={formatMoney(winAmount)} />
         )}
 
         <div className={styles.boardWrap}>
@@ -377,39 +341,11 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
               row's space until the first real pill swaps in — the row never
               grows, so content below never jumps. Newest-first, exactly like
               Crash (row-reverse puts the first pill at the right). */}
-          <div className={styles.historyRow}>
-            <div className={styles.historyScroll} ref={historyScrollRef}>
-              <div
-                  key={slideKey}
-                  ref={pillsRef}
-                  className={styles.historyPills}
-                  style={slideFrom ? { "--pill-slide-from": `${slideFrom}px` } : undefined}
-                >
-                {history.length === 0 ? (
-                  <span className={`${styles.histPill} ${styles.histGray} ${styles.histPlaceholder}`}>
-                    0.00×
-                  </span>
-                ) : (
-                  history.map((h) => (
-                    <span
-                      key={h._pillId}
-                      className={`${styles.histPill} ${h.won ? styles.histGreen : styles.histGray}`}
-                    >
-                      {Number(h.multiplier).toFixed(2)}×
-                    </span>
-                  ))
-                )}
-              </div>
-            </div>
-            {/* Same row as the pills — pills left, marker right (the universal
-                rule for every pills game, matching Limbo). */}
-            <div className={styles.historyMeta}>
-              <button className={styles.historyIcon} type="button" aria-label="My bets">
-                <IconArticle size={18} />
-              </button>
-              <span className={styles.historyYou}>‹ You</span>
-            </div>
-          </div>
+          <HistoryPills
+          items={history}
+          getValue={(h) => `${Number(h.multiplier).toFixed(2)}×`}
+          placeholder="0.00×"
+        />
 
           <div className={styles.wheelStage}>
 
@@ -462,41 +398,20 @@ export default function Wheel({ gameRow, soundEnabled, soundVolume }) {
           {!isMobile && (
             <div className={`${styles.hoverPanel} ${activeInfo ? styles.hoverPanelVisible : ""}`}>
               <div className={styles.hoverBoxes}>
-                <div className={styles.hoverBox}>
-                  <div className={styles.hoverLabel}>Multiplier</div>
-                  <div className={styles.hoverField}>
-                    <input
-                      className={styles.hoverInput}
-                      type="text"
-                      readOnly
-                      value={(activeInfo ? activeInfo.multiplier : 0).toFixed(2)}
-                    />
-                    <span className={styles.hoverSuffix}>×</span>
-                  </div>
-                </div>
-                <div className={styles.hoverBox}>
-                  <div className={styles.hoverLabel}>Profit on Win</div>
-                  <div className={styles.hoverField}>
-                    <input
-                      className={styles.hoverInput}
-                      type="text"
-                      readOnly
-                      value={formatMoney(activeInfo ? activeInfo.profit : 0)}
-                    />
-                    <span className={styles.hoverSuffix}><CurrencyIcon /></span>
-                  </div>
-                </div>
-                <div className={styles.hoverBox}>
-                  <div className={styles.hoverLabel}>Chance</div>
-                  <div className={styles.hoverField}>
-                    <input
-                      className={styles.hoverInput}
-                      type="text"
-                      readOnly
-                      value={activeInfo ? `${activeInfo.chanceNum}/${activeInfo.chanceDen}` : `0/${segments}`}
-                    />
-                  </div>
-                </div>
+                <HoverStatField
+                  label="Multiplier"
+                  value={(activeInfo ? activeInfo.multiplier : 0).toFixed(2)}
+                  suffix="×"
+                />
+                <HoverStatField
+                  label="Profit on Win"
+                  value={formatMoney(activeInfo ? activeInfo.profit : 0)}
+                  suffix={<CurrencyIcon />}
+                />
+                <HoverStatField
+                  label="Chance"
+                  value={activeInfo ? `${activeInfo.chanceNum}/${activeInfo.chanceDen}` : `0/${segments}`}
+                />
               </div>
               <div className={styles.hoverArrow} style={{ left: `${arrowLeftPercent}%` }} aria-hidden="true" />
             </div>

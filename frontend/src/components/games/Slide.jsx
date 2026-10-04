@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
@@ -65,62 +66,37 @@ export default function Slide({ gameRow, soundEnabled = true }) {
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`} type="button">Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
-
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00"
-                value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked}>½</button>
-              <div className={styles.divider}></div>
-              <button onClick={() => adjustBet(2)} disabled={isLocked}>2×</button>
-            </div>
-          </div>
-          <BetError message={betLockedError} />
-          <BetError message={betError} />
-        </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          quickAdjustDisabled={isLocked}
+          errors={[betLockedError, betError]}
+        />
 
         <span className="ui-bet-wrap">
-          <button
-            className={styles.betButton}
+          <SidebarBetButton
             onClick={handleBet}
             disabled={isLocked}
             data-bet-sound="true"
             title={isLocked ? betErrorMessage : undefined}
           >
             Bet
-          </button>
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Profit on Win</span>
-            <span>$0.00</span>
-          </div>
-          <div className={styles.readonlyInput}>
-            <input type="text" value="0.00" readOnly />
-            <CurrencyIcon className={styles.btcIcon} />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label="Profit on Win"
+          meta="$0.00"
+          value="0.00"
+          currency
+        />
       </div>
 
       <div className={styles.gameStage}>

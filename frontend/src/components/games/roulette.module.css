@@ -50,9 +50,7 @@
    (composed here so every game matches). Roulette-specific
    tweaks only below.
    ========================================================= */
-.modeToggle { composes: sidebar-mode-toggle from global; }
-.modeBtn { composes: sidebar-mode-btn from global; }
-.active { composes: sidebar-mode-active from global; }
+.modeToggle { composes: sidebar-mode-toggle from global; }.active { composes: sidebar-mode-active from global; }
 
 .controlGroup { composes: sidebar-control-group from global; }
 .labelRow { composes: sidebar-label-row from global; }
@@ -114,35 +112,8 @@
 @keyframes chipSlidePrev { from { transform: translateX(-50px); opacity: 0.35; } to { transform: translateX(0); opacity: 1; } }
 .chipBtnActive {
   background: #ffffff;                            /* white ring behind the selected chip */
-}
-
-/* Bet input */
-.betInputRow {
-  composes: sidebar-input-group from global;
-}
-.betInputLike {
-  composes: sidebar-input-wrapper from global;
-  padding: 0 12px;
-  font-weight: 600;
-  font-size: 16px;
-}
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-  margin-right: 0;
-  margin-left: 10px;
-  font-weight: 800;
-}
-.splitButtons { composes: sidebar-split-buttons from global; }
-/* Roulette split buttons are display-only (disabled): solid #2f3d4c with
+}/* Roulette split buttons are display-only (disabled): solid #2f3d4c with
    #8092a5 text via the shared disabled rule — never faded/translucent */
-.splitButtons button { cursor: not-allowed; }
-.divider { composes: sidebar-divider from global; }
-
-/* Bet button */
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
 
 /* ============================================================
    Game Stage
@@ -258,20 +229,6 @@
 .histColor_red   { background: var(--red); }
 .histColor_black  { background: var(--tile); border: 1px solid rgba(255, 255, 255, 0.16); }
 .histColor_green  { background: var(--green); }
-
-
-/* ============================================================
-   Win Popup
-   ============================================================ */
-
-/* Win popup — shared, dead-centre overlay (global.css) */
-.winPopup {
-  composes: ui-win-popup from global;
-}
-.winPopupTitle { composes: ui-win-popup-title from global; }
-.winPopupAmount { composes: ui-win-popup-amount from global; }
-.winPopupMult { composes: ui-win-popup-mult from global; }
-.winPopupDivider { composes: ui-win-popup-divider from global; }
 
 
 /* ============================================================

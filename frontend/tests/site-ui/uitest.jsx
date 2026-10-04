@@ -628,23 +628,28 @@ async function main() {
       unmountAll();
     }
 
-    // --- 7e: blackjack action icons use their signature colours
-    // (Hit orange, Stand purple — Split/Double stay white)
-    const bj = readCss('src/components/games/blackjack.module.css');
-    const bjHit = firstRule(bj, '.actionHit .actionIcon');
-    const bjStand = firstRule(bj, '.actionStand .actionIcon');
-    ok(/invert\(67%\)/.test(bjHit) && /hue-rotate\(360deg\)/.test(bjHit),
+    // --- 7e: action icons wear their signature colours through the SHARED
+    // icon pipeline (mask + --ui-action-icon-color bound to the accent tokens)
+    const bjJsxSrc = readCss('src/components/games/Blackjack.jsx');
+    ok(/iconColor="var\(--color-action-hit\)"/.test(bjJsxSrc)
+      && /--color-action-hit:\s*#ff9d00/i.test(global),
       'Blackjack: Hit icon is orange #ff9d00');
-    ok(/invert\(18%\)/.test(bjStand) && /hue-rotate\(265deg\)/.test(bjStand),
+    ok(/iconColor="var\(--color-action-stand\)"/.test(bjJsxSrc)
+      && /--color-action-stand:\s*#9000ff/i.test(global),
       'Blackjack: Stand icon is purple #9000ff');
-    ok(/filter:\s*brightness\(0\) invert\(1\)/.test(firstRule(bj, '.actionSplit .actionIcon'))
-      && /filter:\s*brightness\(0\) invert\(1\)/.test(firstRule(bj, '.actionDouble .actionIcon')),
+    const bjSplitBtn = /label="Split"[\s\S]{0,240}?<\/SidebarActionButton>/.exec(bjJsxSrc)?.[0] ?? 'X';
+    const bjDoubleBtn = /label="Double"[\s\S]{0,240}?<\/SidebarActionButton>/.exec(bjJsxSrc)?.[0] ?? 'X';
+    ok(!/iconColor/.test(bjSplitBtn) && !/iconColor/.test(bjDoubleBtn)
+      && /--ui-action-icon-color,\s*currentColor/.test(global),
       'Blackjack: Split / Double icons stay white');
-    ok(/filter:\s*brightness\(0\) invert\(1\)/.test(firstRule(readCss('src/components/games/RPS.module.css'), '.choiceSmallIcon')),
+    ok(!/iconColor/.test(readCss('src/components/games/RPS.jsx'))
+      && /--ui-action-icon-color,\s*currentColor/.test(global),
       'RPS: the rock / paper / scissors marks are white');
-    const flipCss = readCss('src/components/games/flip.module.css');
-    ok(/background:\s*#fca311/.test(firstRule(flipCss, '.dotHeads'))
-      && /background:\s*#3b82f6/.test(firstRule(flipCss, '.dotTails')), 'Flip: heads marker is gold #fca311, tails marker is blue #3b82f6');
+    const flipJsxSrc = readCss('src/components/games/Flip.jsx');
+    ok(/markerColor="var\(--color-action-heads\)"/.test(flipJsxSrc)
+      && /markerColor="var\(--color-action-tails\)"/.test(flipJsxSrc)
+      && /--color-action-heads:\s*#fca311/i.test(global) && /--color-action-tails:\s*#3b82f6/i.test(global),
+      'Flip: heads marker is gold #fca311, tails marker is blue #3b82f6');
     ok(/\.multSuffix\s*\{\s*composes:\s*sidebar-input-suffix from global/.test(readCss('src/components/games/crash.module.css'))
       && /color:\s*var\(--color-text-primary\)/.test(firstRule(global, '.sidebar-input-suffix')), "Crash: the × suffix is plain white");
     ok(!/--bitcoin|--accent-warning|color:/.test(firstRule(global, '.sidebar-currency-icon')), 'the sidebar currency slot is no longer orange');
@@ -807,7 +812,7 @@ async function main() {
         React.createElement(ActiveBetProvider, null,
           React.createElement(Blackjack, { gameRow: bjRow })))
     );
-    const betBtn = (host) => host.querySelector('.css-betButton');
+    const betBtn = (host) => host.querySelector('.sidebar-bet-button');
     const standBtn = (host) => [...host.querySelectorAll('button')].find((b) => /Stand/.test(b.textContent));
     const bet = async (host, payload) => {
       answer = payload;
@@ -837,13 +842,13 @@ async function main() {
     });
     await sleep(560);
     ok(betBtn(host)?.disabled === true, 'a dealt round keeps the bet button disabled');
-    ok(!host.querySelector('.css-resultPopup'), 'no win popup while the cards are still dealing');
+    ok(!host.querySelector('.ui-win-popup'), 'no win popup while the cards are still dealing');
     ok(!/cardOutlineBlackjack/.test(playerCards(host)), 'no blackjack border before the cards land');
     ok(!holeUp(host), 'the hole card is still face-down while it flies');
     await sleep(1500);                    // the player's cards have flipped, the hole is turning
     ok(holeUp(host), 'the dealt hole card is turned over during the deal itself');
-    ok(!host.querySelector('.css-resultPopup'), 'still no popup while that reveal is running');
-    ok(await waitFor(() => !!host.querySelector('.css-resultPopup'), 2500),
+    ok(!host.querySelector('.ui-win-popup'), 'still no popup while that reveal is running');
+    ok(await waitFor(() => !!host.querySelector('.ui-win-popup'), 2500),
       'the win popup lands only after the flips are done');
     ok(/cardOutlineBlackjack/.test(playerCards(host)), 'blackjack cards wear their own border', playerCards(host));
     ok(!!host.querySelector('.css-totalBlackjack'), 'and their own total tone');
@@ -959,23 +964,24 @@ async function main() {
             })))
       );
       await sleep(140);
-      const row = host.querySelector('.css-historyRow');
-      ok(!!row?.querySelector('.css-historyScroll'), `${name}: the pills scroller renders inside the row`);
-      ok(!!row?.querySelector('.css-historyMeta'),
+      const row = host.querySelector('.ui-history-row');
+      ok(!!row?.querySelector('.ui-history-scroll'), `${name}: the pills scroller renders inside the row`);
+      ok(!!row?.querySelector('.ui-history-meta'),
         `${name}: the My-bets marker is in the SAME row as the pills`);
-      ok(row?.querySelector('.css-historyMeta')?.previousElementSibling?.className.includes('css-historyScroll'),
+      ok(row?.querySelector('.ui-history-meta')?.previousElementSibling?.className.includes('ui-history-scroll'),
         `${name}: pills first, marker after them (pills left, marker right)`);
       unmountAll();
 
       const css = readCss(`src/components/games/${cssFile}.module.css`);
-      const scopedRow = /\.container\s+\.historyRow\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+      const globalCss = readCss('src/styles/global.css');
+      const scopedRow = /\.ui-history-row--overlay\s*\{([^}]*)\}/.exec(globalCss)?.[1] ?? '';
       ok(/position:\s*absolute/.test(scopedRow),
         `${name}: the row is an overlay (absolute), so it never joins the layout flow`, scopedRow.replace(/\s+/g, ' '));
-      ok(/top:\s*var\(--stage-pad\)/.test(scopedRow) && /left:\s*var\(--stage-pad\)/.test(scopedRow)
-        && /right:\s*var\(--stage-pad\)/.test(scopedRow),
+      ok(/top:\s*var\(--stage-pad/.test(scopedRow) && /left:\s*var\(--stage-pad/.test(scopedRow)
+        && /right:\s*var\(--stage-pad/.test(scopedRow),
         `${name}: it is pinned to the stage's top strip`);
-      const scopedMeta = /\.container\s+\.historyMeta\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-      ok(/margin-bottom:\s*0/.test(scopedMeta),
+      const scopedMeta = /\.ui-history-row \.ui-history-meta\s*\{([^}]*)\}/.exec(globalCss)?.[1] ?? '';
+      ok(/margin:\s*0/.test(scopedMeta),
         `${name}: the marker adds no extra height to the row`, scopedMeta.replace(/\s+/g, ' '));
       const stage = /\.gameStage\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
       ok(/--history-strip:/.test(stage) && /padding-top:\s*calc\(var\(--stage-pad\)\s*\+\s*var\(--history-strip\)\)/.test(stage),
@@ -1053,7 +1059,7 @@ async function main() {
     setInputValue(host.querySelector('input[type=number]'), '10');
     await sleep(60);
     const t0 = Date.now();
-    host.querySelector('.css-betButton').click();
+    host.querySelector('.sidebar-bet-button').click();
     await sleep(160);
 
     const motions = [...host.querySelectorAll('.css-cardMotion')].map((m) => {
@@ -1277,7 +1283,7 @@ async function main() {
       ok(betBtn?.disabled === false, `${name}: the button is armed while the game is enabled`);
       const halves = [...host.querySelectorAll('button')].filter((b) => ['½', '2×'].includes(b.textContent.trim()));
       ok(halves.length === 2, `${name}: the ½ / 2× adjusters follow the lobby convention`, String(halves.length));
-      ok(!!host.querySelector('.css-readonlyInput input[readonly]'),
+      ok(!!host.querySelector('.sidebar-readonly-input input[readonly]'),
         `${name}: the profit-on-win readout is a read-only field`);
 
       // the stage is a truthful info shell — description + coming soon, no fake board
@@ -1370,11 +1376,9 @@ async function main() {
     ok(!/margin/.test(/\.histPill\s*\{([^}]*)\}/.exec(crashCss)?.[1] ?? ''), "Crash's pills are margin-free too");
 
     // the exit fade is per-pill and wired in every pills game
-    for (const f of ['Crash', 'Dice', 'Limbo', 'Wheel']) {
-      const src = readCss(`src/components/games/${f}.jsx`);
-      ok(/usePillFadeOut\(historyScrollRef, slideKey\);/.test(src),
-        `${f}: the outgoing pill fades itself (usePillFadeOut on its scroller)`);
-    }
+    const pillsSrc = readCss('src/components/common/HistoryPills.jsx');
+    ok(/usePillFadeOut\(scrollRef, slideKey\);/.test(pillsSrc),
+      'every pills game: the outgoing pill fades itself (usePillFadeOut on the shared scroller)');
     const hook = readCss('src/hooks/usePillFadeOut.js');
     ok(/getBoundingClientRect/.test(hook) && /style\.opacity/.test(hook),
       'the hook fades each pill by its own distance out of the scroller');
@@ -1389,10 +1393,10 @@ async function main() {
             React.createElement(Game, { gameRow: { name, display_name: file, is_enabled: 1, is_mobile_enabled: 1 } })))
       );
       await sleep(140);
-      const row = host.querySelector('.css-historyRow');
-      const meta = host.querySelector('.css-historyMeta');
+      const row = host.querySelector('.ui-history-row');
+      const meta = host.querySelector('.ui-history-meta');
       ok(!!row && !!meta && row.contains(meta), `${file}: the My-bets marker sits IN the pills row`);
-      ok(!!row && row.lastElementChild === meta && row.firstElementChild?.className.includes('historyScroll'),
+      ok(!!row && row.lastElementChild === meta && row.firstElementChild?.className.includes('ui-history-scroll'),
         `${file}: pills left, marker right, one row`, row?.innerHTML.slice(0, 60));
       unmountAll();
       await sleep(30);

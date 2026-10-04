@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarSelectField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
+import HoverStatField from "../common/HoverStatField";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -16,7 +19,6 @@ import gemSvg from "../../assets/keno/gem.svg";
 import kenoGemMp3 from "../../assets/keno/gem.mp3";
 import kenoTileMp3 from "../../assets/keno/tile.mp3";
 import kenoTileSelectMp3 from "../../assets/keno/tileselect.mp3";
-import CurrencyIcon from "../common/CurrencyIcon";
 import { IconDiceFour } from "../common/Icons";
 
 const NUMBERS = Array.from({ length: 40 }, (_, i) => i + 1);
@@ -443,74 +445,51 @@ export default function Keno({ gameRow, soundEnabled = true, soundVolume = 0.8 }
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`}>Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          disabled={isBusy}
+          quickAdjustDisabled={isLocked || isBusy}
+          errors={[betLockedError, betError]}
+        />
 
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-                disabled={isBusy}
-              />
-            </div>
+        <SidebarSelectField
+          label="Difficulty"
+          value={difficulty}
+          onChange={(e) => {
+            setDifficulty(e.target.value);
+            if (drawn.length > 0) softResetResults();
+          }}
+          disabled={isBusy}
+          options={[
+            { value: "easy", label: "Easy" },
+            { value: "medium", label: "Medium" },
+            { value: "high", label: "High" },
+          ]}
+        />
 
-            <div className={styles.coinChip}>
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || isBusy}>½</button>
-              <div className={styles.divider}></div>
-              <button onClick={() => adjustBet(2)} disabled={isLocked || isBusy}>2×</button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Difficulty</span>
-          </div>
-          <div className={`${styles.readonlyInput} ${styles.hasCaret}`}>
-            <select
-              className={styles.select}
-              value={difficulty}
-              onChange={(e) => {
-                setDifficulty(e.target.value);
-                if (drawn.length > 0) softResetResults();
-              }}
-              disabled={isBusy}
-            >
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </div>
-        </div>
-
-        <button className={styles.secondaryButton} onClick={randomPickOne} disabled={isBusy || picksLocked}>
+        <SidebarBetButton variant="secondary" onClick={randomPickOne} disabled={isBusy || picksLocked}>
           Random Pick
-        </button>
-        <button className={styles.secondaryButton} onClick={clearTable} disabled={isBusy}>
+        </SidebarBetButton>
+        <SidebarBetButton variant="secondary" onClick={clearTable} disabled={isBusy}>
           Clear Table
-        </button>
+        </SidebarBetButton>
 
         <span className="ui-bet-wrap">
-          <button className={styles.bigButton} onClick={play} disabled={isLocked || isBusy || selected.length < 1} type="button" data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>
-          Bet
-          </button>
+          <SidebarBetButton
+            onClick={play}
+            disabled={isLocked || isBusy || selected.length < 1}
+            data-bet-sound="true"
+            title={isLocked ? betErrorMessage : undefined}
+          >
+            Bet
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
       </div>
@@ -523,11 +502,7 @@ export default function Keno({ gameRow, soundEnabled = true, soundVolume = 0.8 }
         {/* Win popup — direct child of the stage so it is always dead
             centred over the board as a true overlay (no layout shift). */}
         {showWinPopup && winAmount > 0 && (
-          <div className={styles.winPopup} role="status" aria-live="polite">
-            <div className={styles.winPopupMult}>{Number(winMult || 0).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{format8(winAmount)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={winMult || 0} amountText={format8(winAmount)} />
         )}
 
         <div className={styles.boardWrap}>
@@ -605,44 +580,21 @@ export default function Keno({ gameRow, soundEnabled = true, soundVolume = 0.8 }
                   {!isMobile && (
                     <div className={`${styles.hoverPanel} ${desktopHoverActive ? styles.hoverPanelVisible : ""}`}>
                       <div className={styles.hoverBoxes}>
-                        <div className={styles.hoverBox}>
-                          <div className={styles.hoverLabel}>Payout</div>
-                          <div className={styles.hoverField}>
-                            <input
-                              className={styles.hoverInput}
-                              type="text"
-                              readOnly
-                              value={(hoverInfo ? hoverInfo.multiplier : 0).toFixed(2)}
-                            />
-                            <span className={styles.hoverSuffix}>×</span>
-                          </div>
-                        </div>
-                        <div className={styles.hoverBox}>
-                          <div className={styles.hoverLabel}>Profit on Win</div>
-                          <div className={styles.hoverField}>
-                            <input
-                              className={styles.hoverInput}
-                              type="text"
-                              readOnly
-                              value={format8(hoverInfo ? hoverInfo.profit : 0)}
-                            />
-                            <span className={styles.hoverSuffixGem}>
-                              <img src={gemSvg} alt="" />
-                            </span>
-                          </div>
-                        </div>
-                        <div className={styles.hoverBox}>
-                          <div className={styles.hoverLabel}>Chance</div>
-                          <div className={styles.hoverField}>
-                            <input
-                              className={styles.hoverInput}
-                              type="text"
-                              readOnly
-                              value={hoverInfo ? hoverInfo.chance.toFixed(9) : "0.000000000"}
-                            />
-                            <span className={styles.hoverSuffix}>%</span>
-                          </div>
-                        </div>
+                        <HoverStatField
+                          label="Payout"
+                          value={(hoverInfo ? hoverInfo.multiplier : 0).toFixed(2)}
+                          suffix="×"
+                        />
+                        <HoverStatField
+                          label="Profit on Win"
+                          value={format8(hoverInfo ? hoverInfo.profit : 0)}
+                          suffix={<img src={gemSvg} alt="" className={styles.hoverGemIcon} />}
+                        />
+                        <HoverStatField
+                          label="Chance"
+                          value={hoverInfo ? hoverInfo.chance.toFixed(9) : "0.000000000"}
+                          suffix="%"
+                        />
                       </div>
                       <div className={styles.hoverArrow} style={{ left: `${arrowLeftPercent}%` }} aria-hidden="true" />
                     </div>

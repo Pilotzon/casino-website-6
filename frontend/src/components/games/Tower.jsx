@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarReadOnlyField, SidebarSelectField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
 import BetLockBadge from "../common/BetLockBadge";
@@ -35,7 +37,6 @@ import selectedMp3 from "../../assets/tower/Selected.mp3";
 import loseDragonMp3 from "../../assets/tower/LoseDragon.mp3";
 import loseFireMp3 from "../../assets/tower/LoseFire.mp3";
 import eggMp3 from "../../assets/tower/Egg.mp3";
-import CurrencyIcon from "../common/CurrencyIcon";
 
 const DIFFS = ["easy", "medium", "hard"];
 const DEFAULT_ROWS = 9;
@@ -510,99 +511,62 @@ function Tower({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
     <div className={styles.container} data-phase={uiPhase}>
       <div className={styles.sidebar}>
         <div className={styles.controlsHeader}>
-          <div className={styles.modeToggle}>
-            <button className={`${styles.modeBtn} ${styles.active}`} type="button">
-              Manual
-            </button>
-            <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>
-              Auto
-            </button>
-          </div>
+          <SidebarModeToggle />
         </div>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          disabled={inGame}
+          quickAdjustDisabled={isLocked || inGame}
+          errors={[betLockedError, betError]}
+        />
 
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-                disabled={inGame}
-              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || inGame} type="button">
-                ½
-              </button>
-              <div className={styles.divider} />
-              <button onClick={() => adjustBet(2)} disabled={isLocked || inGame} type="button">
-                2×
-              </button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
-
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Difficulty</span>
-          </div>
-
-          <select
-            className={styles.select}
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            disabled={inGame}
-          >
-            <option value="easy">Easy (4 tiles)</option>
-            <option value="medium">Medium (3 tiles)</option>
-            <option value="hard">Hard (2 tiles)</option>
-          </select>
-        </div>
+        <SidebarSelectField
+          label="Difficulty"
+          value={difficulty}
+          onChange={(e) => setDifficulty(e.target.value)}
+          disabled={inGame}
+          options={[
+            { value: "easy", label: "Easy (4 tiles)" },
+            { value: "medium", label: "Medium (3 tiles)" },
+            { value: "hard", label: "Hard (2 tiles)" },
+          ]}
+        />
 
         {!inGame ? (
           <span className="ui-bet-wrap">
-            <button
-              className={styles.betButton}
+            <SidebarBetButton
               onClick={start}
               type="button"
               data-bet-sound="true"
               disabled={isLocked} title={isLocked ? betErrorMessage : undefined}>
             Bet
-            </button>
+            </SidebarBetButton>
             <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
           </span>
         ) : (
-          <button
-            className={styles.betButton}
+          <SidebarBetButton
+            variant="cashout"
             onClick={cashout}
             disabled={isLocked || !canCashout}
-            type="button"
-           title={isLocked ? betErrorMessage : undefined}>
+            title={isLocked ? betErrorMessage : undefined}
+          >
             Cashout
-          </button>
+          </SidebarBetButton>
         )}
 
-        <div className={styles.controlGroup} style={{ marginTop: "0" }}>
-          <div className={styles.labelRow}>
-            <span>Total Profit ({Number(currentMultiplier || 0).toFixed(2)}×)</span>
-            <span>$0.00</span>
-          </div>
-
-          <div className={`${styles.readonlyInput} ${styles.profitInput}`}>
-            <input type="text" value={format8(profit)} readOnly />
-            <CurrencyIcon className={styles.btcIcon} />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label={`Total Profit (${Number(currentMultiplier || 0).toFixed(2)}×)`}
+          meta="$0.00"
+          value={format8(profit)}
+          currency
+          groupStyle={{ marginTop: "0" }}
+        />
       </div>
 
       <div className={styles.gameStage}>
@@ -614,11 +578,7 @@ function Tower({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
             overflow:hidden and would clip it), always dead-centred
             as a true overlay. */}
         {status === "cashed_out" && lastCashoutPayout != null && (
-          <div className={styles.winPopup} role="status" aria-live="polite">
-            <div className={styles.winPopupMult}>{Number(currentMultiplier || 0).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{format8(lastCashoutPayout)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={currentMultiplier || 0} amountText={format8(lastCashoutPayout)} />
         )}
 
         <div

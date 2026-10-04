@@ -43,60 +43,10 @@
 .modeToggle {
   composes: sidebar-mode-toggle from global;
 }
-
-.modeBtn {
-  composes: sidebar-mode-btn from global;
-}
-
-.active {
-  composes: sidebar-mode-active from global;
-}
-
-.controlGroup {
-  composes: sidebar-control-group from global;
-}
-
-.labelRow {
-  composes: sidebar-label-row from global;
-}
-
-.inputGroup {
-  composes: sidebar-input-group from global;
-}
-
-.inputWrapper {
-  composes: sidebar-input-wrapper from global;
-}
-
-.splitButtons {
-  composes: sidebar-split-buttons from global;
-}
-
-.divider {
-  composes: sidebar-divider from global;
-}
-
-.betButton {
-  composes: sidebar-bet-button from global;
-}
-
 .betRow {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-
-.cashoutBtn {
-  composes: sidebar-secondary-button from global;
-}
-
-.continueBtn {
-  composes: sidebar-bet-button from global;
-  margin-top: 0;
-}
-
-.secondaryButton {
-  composes: sidebar-secondary-button from global;
 }
 
 .choiceRow {
@@ -124,40 +74,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
-.choiceSmallActive {
-  composes: ui-action-active from global;
-}
-
-/* recolor only — zero layout shift */
-/* Rock / Paper / Scissors marks on the sidebar buttons: white (only the
-   currency mark is coloured in the sidebar) */
-.choiceSmallIcon {
-  width: 14px;
-  height: 14px;
-  filter: brightness(0) invert(1);
-}
-
-
-.profitInput {
-  background: var(--color-bg-input-profit);
-  /* #141f28 — Total Profit field */
-}
-
-.readonlyMoney {
-  composes: sidebar-readonly-input from global;
-}
-
-.moneyValue {
-  font-weight: 900;
-  font-size: var(--font-size-control);
-}
-
-.btcIcon {
-  composes: sidebar-currency-icon from global;
-  /* $ suffix like every other game */
-}
-
 /* ═══════ Stage ═══════ */
 .stage {
   flex: 1;
@@ -248,17 +164,6 @@
   place-items: center;
   position: relative;
 }
-
-.playerHistoryBase {
-  position: absolute;
-  width: 0%;
-  height: 0%;
-  left: 0;
-  top: 0;
-  object-fit: contain;
-  border-radius: 10px;
-}
-
 .playerHistoryChoice {
   position: relative;
   width: 140px !important;
@@ -546,37 +451,6 @@
 
 /* ═══════ Cashout Win Popup — shared overlay (global.css), slightly
    more compact than the house style; scoped rules keep RPS' look. ═══════ */
-.cashoutPopup {
-  composes: ui-win-popup from global;
-}
-
-.container .cashoutPopup {
-  border-radius: 14px;
-  padding: 14px 20px;
-  min-width: 200px;
-}
-
-.cashoutPopupTitle {
-  composes: ui-win-popup-title from global;
-}
-
-.cashoutPopupAmount {
-  composes: ui-win-popup-amount from global;
-}
-
-.cashoutPopupMult {
-  composes: ui-win-popup-mult from global;
-}
-
-.cashoutPopupDivider {
-  composes: ui-win-popup-divider from global;
-}
-
-/* win status — scoped so it beats the shared green border */
-.cashoutPopup.popupWin {
-  border-color: rgba(0, 231, 1, 0.85);
-}
-
 /* ═══════ Responsive ═══════ */
 @media (max-width: 900px) {
   .container {

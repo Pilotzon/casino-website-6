@@ -1,13 +1,13 @@
 import Stepper from "../common/Stepper";
+import GameWinPopup from "../common/GameWinPopup";
+import { BetAmountField, SidebarReadOnlyField, SidebarModeToggle, SidebarBetButton } from "../common/SidebarControls";
+import HistoryPills from "../common/HistoryPills";
 import { useEffect, useMemo, useRef, useState } from "react";
 import useActiveBetFlag from "../../hooks/useActiveBetFlag";
 import useGameDisabled from "../../hooks/useGameDisabled";
-import usePillSlide from "../../hooks/usePillSlide";
-import usePillFadeOut from "../../hooks/usePillFadeOut";
 import BetLockBadge from "../common/BetLockBadge";
 import DisabledGameStage from "./DisabledGameStage";
 import BetError from "../common/BetError";
-import { IconArticle } from "../common/Icons";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import { gamesAPI } from "../../services/api";
@@ -18,7 +18,6 @@ import useGameAudio from "../../hooks/useGameAudio";
 // ✅ Limbo sounds
 import limboWinMp3 from "../../assets/limbo/Win.mp3";
 import limboRoundMp3 from "../../assets/limbo/Round.mp3";
-import CurrencyIcon from "../common/CurrencyIcon";
 
 function Limbo({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   const { user, isAuthenticated, updateBalance, openLoginModal } = useAuth();
@@ -67,21 +66,7 @@ function Limbo({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   // Stable pill ids: the slide keys on the newest pill's IDENTITY (the row
   // is capped, so its length stops changing while new pills keep arriving)
   const pillSeqRef = useRef(0);
-  const historyScrollRef = useRef(null);
-  // Pill row slides in from the right as one motion on every addition
-  const { pillsRef, slideKey, slideFrom } = usePillSlide(history[0]?._pillId ?? null);
-  // the outgoing pill fades itself as it leaves the scroller (no gradient mask)
-  usePillFadeOut(historyScrollRef, slideKey);
 
-  // Crash parity (mobile scroller): keep the freshest pill in view
-  useEffect(() => {
-    const el = historyScrollRef.current;
-    if (!el || el.scrollWidth <= el.clientWidth + 1) return;
-    const newest = el.firstElementChild?.firstElementChild;
-    if (newest && typeof newest.scrollIntoView === "function") {
-      newest.scrollIntoView({ inline: "nearest", block: "nearest" });
-    }
-  }, [history]);
 
   const [displayMult, setDisplayMult] = useState(1.0);
   const animTokenRef = useRef(0);
@@ -208,60 +193,38 @@ function Limbo({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
   return (
     <div className={styles.container}>
       <div className={styles.sidebar}>
-        <div className={styles.modeToggle}>
-          <button className={`${styles.modeBtn} ${styles.active}`}>Manual</button>
-          <button className={`${styles.modeBtn} sidebar-mode-auto-disabled`} type="button" disabled>Auto</button>
-        </div>
+        <SidebarModeToggle />
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Bet Amount</span>
-            <span>$0.00</span>
-          </div>
-
-          <div className={styles.inputGroup}>
-            <div className={styles.inputWrapper}>
-              <input
-                type="number"
-                placeholder="0.00" value={betAmount}
-                onChange={(e) => setBetAmount(e.target.value)}
-                step="0.00000001"
-                disabled={isPlaying}
-              />
-              <CurrencyIcon className={styles.btcIcon} />
-            </div>
-
-            <div className={styles.splitButtons}>
-              <button onClick={() => adjustBet(0.5)} disabled={isLocked || isPlaying}>
-                ½
-              </button>
-              <div className={styles.divider}></div>
-              <button onClick={() => adjustBet(2)} disabled={isLocked || isPlaying}>
-                2×
-              </button>
-            </div>
-          </div>
-            <BetError message={betLockedError} />
-            <BetError message={betError} />
-        </div>
+        <BetAmountField
+          label="Bet Amount"
+          meta="$0.00"
+          value={betAmount}
+          onChange={(e) => setBetAmount(e.target.value)}
+          onHalf={() => adjustBet(0.5)}
+          onDouble={() => adjustBet(2)}
+          disabled={isPlaying}
+          quickAdjustDisabled={isLocked || isPlaying}
+          errors={[betLockedError, betError]}
+        />
 
         <span className="ui-bet-wrap">
-          <button className={styles.betButton} onClick={handlePlay} disabled={isLocked || isPlaying} data-bet-sound="true" title={isLocked ? betErrorMessage : undefined}>
-          {isPlaying ? "Betting..." : "Bet"}
-          </button>
+          <SidebarBetButton
+            onClick={handlePlay}
+            disabled={isLocked || isPlaying}
+            data-bet-sound="true"
+            title={isLocked ? betErrorMessage : undefined}
+          >
+            {isPlaying ? "Betting..." : "Bet"}
+          </SidebarBetButton>
           <BetLockBadge locked={isLocked} title={disabledTitle} description={disabledDesc} />
         </span>
 
-        <div className={styles.controlGroup}>
-          <div className={styles.labelRow}>
-            <span>Profit on Win</span>
-            <span>$0.00</span>
-          </div>
-          <div className={styles.readonlyInput}>
-            <input type="text" value={profit.toFixed(2)} readOnly />
-            <CurrencyIcon className={styles.btcIcon} />
-          </div>
-        </div>
+        <SidebarReadOnlyField
+          label="Profit on Win"
+          meta="$0.00"
+          value={profit.toFixed(2)}
+          currency
+        />
       </div>
 
       <div className={styles.gameStage}>
@@ -278,39 +241,12 @@ function Limbo({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
             size final until the first real pill swaps in. Newest-first,
             exactly like Crash (row-reverse puts the first pill at the
             right). */}
-        <div className={styles.historyRow}>
-          <div className={styles.historyScroll} ref={historyScrollRef}>
-            <div
-                  key={slideKey}
-                  ref={pillsRef}
-                  className={styles.historyPills}
-                  style={slideFrom ? { "--pill-slide-from": `${slideFrom}px` } : undefined}
-                >
-              {history.length === 0 ? (
-                <span className={`${styles.histPill} ${styles.histGray} ${styles.histPlaceholder}`}>
-                  0.00×
-                </span>
-              ) : (
-                history.map((h) => (
-                  <span
-                    key={h._pillId}
-                    className={`${styles.histPill} ${h.won ? styles.histGreen : styles.histGray}`}
-                  >
-                    {Number(h.resultMultiplier).toFixed(2)}×
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Crash's marker, identical in every pills game — same row */}
-          <div className={styles.historyMeta}>
-            <button className={styles.historyIcon} type="button" aria-label="My bets">
-              <IconArticle size={18} />
-            </button>
-            <span className={styles.historyYou}>‹ You</span>
-          </div>
-        </div>
+        <HistoryPills
+          items={history}
+          getValue={(h) => `${Number(h.resultMultiplier).toFixed(2)}×`}
+          placeholder="0.00×"
+          placement="overlay"
+        />
 
         <div
           className={`${styles.bigMultiplier} ${result ? (result.won ? styles.bigWin : styles.bigLoss) : ""
@@ -337,11 +273,7 @@ function Limbo({ gameRow, soundEnabled = true, soundVolume = 0.8 }) {
         </div>
 
         {result?.won && (
-          <div className={styles.winPopup}>
-            <div className={styles.winPopupMult}>{Number(result.resultMultiplier).toFixed(2)}×</div>
-            <div className={styles.winPopupDivider} aria-hidden="true" />
-            <div className={styles.winPopupAmount}>{Number(result.payout).toFixed(2)}<CurrencyIcon /></div>
-          </div>
+          <GameWinPopup multiplier={result.resultMultiplier} amount={result.payout} />
         )}
 
         <div className={styles.bottomStack}>

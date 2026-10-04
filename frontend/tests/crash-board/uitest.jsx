@@ -107,15 +107,19 @@ const liveState = (roundExtra = {}, topExtra = {}) => {
   };
 };
 
+const betBtn = (host) => host.querySelector('.sidebar-bet-button:not(.sidebar-bet-button--cashout)');
+const cashoutBtn = (host) => host.querySelector('.sidebar-bet-button--cashout');
+const betText = (host) => betBtn(host)?.textContent?.trim() ?? null;
+
 const startRound = async (host, state) => {
   api.start = state;
   api.state = state;
   const input = host.querySelector('input[type=number]');
   if (input) setInputValue(input, '10');
   await sleep(60);
-  await waitFor(() => host.querySelector('.css-betButton') && !host.querySelector('.css-betButton').disabled, 2500);
-  host.querySelector('.css-betButton')?.click();
-  return waitFor(() => !!host.querySelector('.css-cashoutBtn'), 2500);
+  await waitFor(() => betBtn(host) && !betBtn(host).disabled, 2500);
+  betBtn(host)?.click();
+  return waitFor(() => !!cashoutBtn(host), 2500);
 };
 
 async function main() {
@@ -195,7 +199,7 @@ async function main() {
     history: [{ roundId: 'r1', value: 1.05, won: false, at: 'now' }],
     crashed: true,
   };
-  c1.querySelector('.css-cashoutBtn').click();
+  cashoutBtn(c1).click();
   await sleep(120);                                   // response NOT back yet
   ok(/Cashed Out/.test(txt(c1, 'statusBox') ?? ''), 'cash-out box appears IMMEDIATELY (optimistic)', txt(c1, 'statusBox'));
   ok(!!c1.querySelector('.css-statusGreen'), 'the cash-out multiplier is the green span');
@@ -217,7 +221,7 @@ async function main() {
   await sleep(1000);                                  // the late cash-out response lands here
   ok(/Crashed/.test(txt(c1, 'statusBox') ?? ''), 'STILL crashed after the late cash-out response', txt(c1, 'statusBox'));
   ok(linePath(c1).getAttribute('stroke') === '#2E4552', 'line is still muted (no un-crash)');
-  ok(!c1.querySelector('.css-cashoutBtn'), 'no Cash Out button after the round ended');
+  ok(!cashoutBtn(c1), 'no Cash Out button after the round ended');
   // Crash never toasts a win or a loss any more — the board says it all, and
   // "the crash beat your cash-out" is an outcome, not an error.
   ok(!toasts.some(([k]) => k === 'loss'),
@@ -249,7 +253,7 @@ async function main() {
       roundId: 'rLive', startedAt, currentMultiplier: 1.1,
       cashedOut: true, cashoutMultiplier: 1.04, payout: 10.4, crashPoint: 1.6,
     }, { balance: 96 });
-    c1b.querySelector('.css-cashoutBtn').click();
+    cashoutBtn(c1b).click();
     ok(await waitFor(() => playedWinSound(), 2000), 'a confirmed cash-out plays the win sound',
       JSON.stringify(global.__playedAudio || []));
     ok(!toasts.some(([k]) => k === 'success'),
@@ -286,7 +290,7 @@ async function main() {
     api.state = liveState({ roundId: 'rFresh', startedAt: Date.now() - 7000, currentMultiplier: 1.58 });
     api.last = api.state;
     const c2b = mountBoard();
-    await waitFor(() => !!c2b.querySelector('.css-cashoutBtn'), 2500);
+    await waitFor(() => !!cashoutBtn(c2b), 2500);
     const at = num(c2b, 'xTotal');
     ok(at >= 6 && at <= 9, 'after a refresh the counter resumes the ROUND time (≈7s), not 0', String(at));
     await sleep(1100);
@@ -341,7 +345,7 @@ async function main() {
   console.log('\n=== 6. new round: fresh clock, clean box, white dot ===');
   {
     const c4 = mountBoard();
-    await waitFor(() => !!c4.querySelector('.css-betButton'), 2500);
+    await waitFor(() => !!betBtn(c4), 2500);
     ok(await startRound(c4, liveState({ roundId: 'rNew', startedAt: Date.now(), currentMultiplier: 1 })), 'new round running');
     await sleep(150);
     ok(!c4.querySelector('.css-statusBox'), 'status box cleared for the new round');
@@ -358,7 +362,7 @@ async function main() {
     api.state = liveState({ roundId: 'rSmooth', startedAt: Date.now() - 1200, currentMultiplier: 1.08 });
     api.last = api.state;
     const c5 = mountBoard();
-    ok(await waitFor(() => !!c5.querySelector('.css-cashoutBtn'), 3000), 'slow-link round running');
+    ok(await waitFor(() => !!cashoutBtn(c5), 3000), 'slow-link round running');
     await sleep(150);
     const samples = [];
     for (let i = 0; i < 30; i += 1) {
@@ -395,7 +399,7 @@ async function main() {
   console.log('\n=== 7. refresh prompt: wider/taller modal with spacing ===');
   {
     const c6 = mountBoard();
-    await waitFor(() => !!c6.querySelector('.css-betButton'), 2500);
+    await waitFor(() => !!betBtn(c6), 2500);
     await startRound(c6, liveState({ roundId: 'rModal', startedAt: Date.now(), currentMultiplier: 1 }));
     window.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'F5', bubbles: true, cancelable: true }));
     await sleep(250);
@@ -418,9 +422,10 @@ async function main() {
     ok(/\.chartWrap\s*\{[^}]*grid-template-rows:\s*minmax\(clamp\(/.test(mobile),
       'chart gets an explicit height on phones (it does not collapse)');
     ok(/\.chartWrap\s*\{[^}]*width:\s*100%/.test(mobile), 'chart fills the stage width (centred)');
-    ok(/\.historyScroll\s*\{[^}]*overflow-x:\s*auto/.test(mobile), 'history pills scroll horizontally');
-    ok(/scrollbar-width:\s*thin/.test(mobile), 'the pill scroller shows a thin scrollbar');
-    ok(/\.historyPills\s*\{[^}]*direction:\s*rtl/.test(mobile),
+    const historyGlobal = readFileSync(resolve(here, '../../src/styles/global.css'), 'utf8');
+    ok(/\.ui-history-scroll\s*\{[^}]*overflow-x:\s*auto/.test(historyGlobal), 'history pills scroll horizontally');
+    ok(/scrollbar-width:\s*thin/.test(historyGlobal), 'the pill scroller shows a thin scrollbar');
+    ok(/\.ui-history-pills\s*\{[^}]*direction:\s*rtl/.test(historyGlobal),
       'pills keep the newest round at the right while scrolling');
     ok(/\.yTickBox\s*\{[^}]*font-size:\s*18px/.test(mobile), 'Y tick labels are bigger on phones');
     ok(/\.xTick\s*\{[^}]*font-size:\s*17px/.test(mobile), 'X tick labels are bigger on phones');
@@ -428,8 +433,8 @@ async function main() {
     ok(/\.centerMult\s*\{[^}]*15vw/.test(mobile), 'multiplier scales up on phones');
     ok(/\.statusBox\s*\{[^}]*font-size:\s*23px/.test(mobile), 'status box text is bigger on phones');
     ok(/\.yAxisSpine\s*\{[^}]*width:\s*7px/.test(mobile), 'spine stays thicker than the labels');
-    const jsx = readFileSync(resolve(here, '../../src/components/games/Crash.jsx'), 'utf8');
-    ok(/historyScroll[\s\S]{0,200}historyPills/.test(jsx), 'pills live inside the scroller element');
+    const pillsJsx = readFileSync(resolve(here, '../../src/components/common/HistoryPills.jsx'), 'utf8');
+    ok(/ui-history-scroll[\s\S]{0,200}ui-history-pills/.test(pillsJsx), 'pills live inside the scroller element');
   }
 
   /* ------------------------------------------------------------------ §9 */
@@ -439,7 +444,7 @@ async function main() {
     api.state = liveState({ roundId: 'rAxis', startedAt, currentMultiplier: 1.58 });
     api.last = api.state;
     const c7 = mountBoard();
-    ok(await waitFor(() => !!c7.querySelector('.css-cashoutBtn'), 3000), 'round running');
+    ok(await waitFor(() => !!cashoutBtn(c7), 3000), 'round running');
     await sleep(120);
 
     const tipX = lastPoint(linePath(c7).getAttribute('d')).x;
@@ -491,7 +496,7 @@ async function main() {
       'the multiplier/status layer is above the tip dot', `overlay=${overlay} tip=${tip}`);
 
     const c8 = mountBoard();
-    await waitFor(() => !!c8.querySelector('.css-betButton'), 2500);
+    await waitFor(() => !!betBtn(c8), 2500);
     ok(await startRound(c8, liveState({ roundId: 'rLayer', startedAt: Date.now(), currentMultiplier: 1 })), 'round running');
     await sleep(150);
     ok(!!c8.querySelector('.css-centerOverlay') && !!c8.querySelector('.css-tipMarker'),
@@ -510,7 +515,7 @@ async function main() {
     ok(/\.stageTotal\s*\{\s*display:\s*none/.test(css), 'the top clock is hidden on desktop');
 
     const c9 = mountBoard();
-    await waitFor(() => !!c9.querySelector('.css-betButton'), 2500);
+    await waitFor(() => !!betBtn(c9), 2500);
     ok(await startRound(c9, liveState({ roundId: 'rTop', startedAt: Date.now(), currentMultiplier: 1 })), 'round running');
     await sleep(150);
     const topClock = c9.querySelector('.css-xTotalTop');
@@ -518,7 +523,7 @@ async function main() {
     ok(topClock?.textContent?.trim() === txt(c9, 'xTotal'), 'both clocks show the same seconds',
       `${topClock?.textContent} / ${txt(c9, 'xTotal')}`);
     const stageHtml = c9.querySelector('.css-gameStage')?.innerHTML ?? '';
-    ok(stageHtml.indexOf('css-historyRow') < stageHtml.indexOf('css-stageTotal')
+    ok(stageHtml.indexOf('ui-history-row') < stageHtml.indexOf('css-stageTotal')
       && stageHtml.indexOf('css-stageTotal') < stageHtml.indexOf('css-chartWrap'),
       'it sits between the pills row and the chart');
     unmountAll();
@@ -538,8 +543,8 @@ async function main() {
       history: [{ roundId: 'rCool', value: 1.2, won: false, at: 'now' }],
     };
     const c10 = mountBoard();
-    ok(await waitFor(() => /^Wait \ds$/.test(txt(c10, 'betButton') ?? ''), 2500),
-      'the button itself counts the cooldown down', txt(c10, 'betButton'));
+    ok(await waitFor(() => /^Wait \ds$/.test(betText(c10) ?? ''), 2500),
+      'the button itself counts the cooldown down', betText(c10));
     ok(!/Next round available/i.test(c10.textContent || ''),
       'the "Next round available in Ns" sentence is gone completely');
     unmountAll();
@@ -560,7 +565,7 @@ async function main() {
     const jsx = readFileSync(resolve(here, '../../src/components/games/Crash.jsx'), 'utf8');
     ok(/phase === 'cashedOut'\)\s*\{\s*actionLabel = 'End Animation';/.test(jsx),
       'cash-out turns the button into "End Animation"');
-    ok(/actionLabel = 'End Animation';\s*\n\s*actionClass = styles\.stopBtn;/.test(jsx),
+    ok(/actionLabel = 'End Animation';\s*\n\s*actionVariant = "secondary";/.test(jsx),
       'it keeps the stop button styling');
   }
 
@@ -571,14 +576,13 @@ async function main() {
     // by exactly the new pill's width — the pill itself is then off-view,
     // clipped by the scroller — and the keyframes walk the row back to 0
     // while the older pills shift left with it.
-    const css = readFileSync(resolve(here, '../../src/components/games/crash.module.css'), 'utf8');
-    const jsx = readFileSync(resolve(here, '../../src/components/games/Crash.jsx'), 'utf8');
+    const jsx = readFileSync(resolve(here, '../../src/components/common/HistoryPills.jsx'), 'utf8');
     const glob = readFileSync(resolve(here, '../../src/styles/global.css'), 'utf8');
-    ok(/\.historyPills\s*\{[^}]*animation:\s*ui-pills-slide/.test(css),
+    ok(/\.ui-history-pills\s*\{[^}]*animation:\s*ui-pills-slide/.test(glob),
       'the pills container carries the row-slide animation');
     ok(/@keyframes ui-pills-slide\s*\{[^}]*var\(--pill-slide-from/.test(glob),
       'the keyframes glide the row from that distance back to 0');
-    ok(/usePillSlide\(newestPillKey\)/.test(jsx),
+    ok(/usePillSlide\(newestKey\)/.test(jsx),
       'the slide is keyed on the NEWEST pill\'s identity (a capped row never stops sliding)');
     ok(/--pill-slide-from/.test(jsx), 'the measured distance rides to CSS as --pill-slide-from');
     ok(/key=\{slideKey\}/.test(jsx), 'the container is remounted per arrival so the animation replays');
@@ -591,16 +595,16 @@ async function main() {
     };
     const c11 = mountBoard();
     await sleep(400);
-    ok(!c11.querySelector('.css-histPill:not(.css-histPlaceholder)'),
+    ok(!c11.querySelector('.ui-hist-pill:not(.ui-hist-placeholder)'),
       'only the invisible placeholder is on the row before the first round');
     api.state = {
       ...api.state,
       history: [{ roundId: 'rSlide', value: 1.2, won: true, at: 'a' }],
     };
     // idle polls are 4s apart (POLL_IDLE_MS), so give the next one room
-    ok(await waitFor(() => !!c11.querySelector('.css-histPill:not(.css-histPlaceholder)'), 6000),
+    ok(await waitFor(() => !!c11.querySelector('.ui-hist-pill:not(.ui-hist-placeholder)'), 6000),
       'a finished round lands as a real pill');
-    const from = c11.querySelector('.css-historyPills')?.style.getPropertyValue('--pill-slide-from') ?? '';
+    const from = c11.querySelector('.ui-history-pills')?.style.getPropertyValue('--pill-slide-from') ?? '';
     ok(parseFloat(from) > 0,
       'the row is armed with the new pill\'s width (it starts off-view right)', `--pill-slide-from:${from}`);
     unmountAll();
